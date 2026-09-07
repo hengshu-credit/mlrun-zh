@@ -2,6 +2,10 @@
 
 This guide outlines the steps for installing and running MLRun locally.
 
+For a verified single-node Kubernetes deployment with kind on Windows, see the
+[Chinese deployment guide](kind/README.zh-CN.md), including manifests, access URLs,
+storage behavior, and a Kubernetes job smoke test.
+
 > **Note:** Replace the `<namespace>` placeholder in all the commands in this guide with your cluster's Kubernetes namespace.
 
 #### In This Document
