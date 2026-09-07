@@ -5,7 +5,7 @@
 ## 部署范围与版本
 
 - kind：v0.33.0；Kubernetes 节点镜像：`kindest/node:v1.37.0`。
-- MLRun API、UI、Jupyter：均为 `1.7.0`，与仓库 `hack/local/README.md` 指定版本一致。
+- MLRun API、UI、Jupyter：均为 `1.13.0-rc7`。下载、kind 导入和本目录部署清单必须使用同一版本；上级目录的旧示例不适用于此版本。
 - 使用发布镜像，不会构建或加载当前工作区源码。修改 Python 源码后，需要另行构建对应镜像并更新 Deployment。
 - 集群名称 `mlrun`，kubectl context `kind-mlrun`，命名空间 `mlrun`。
 - 这是单节点开发/体验部署。未安装 Nuclio、Kubeflow Pipelines、Spark/MPI Operator、监控组件或镜像构建仓库；这些能力需要额外部署。
@@ -13,7 +13,7 @@
 
 ## 前置条件
 
-Docker Desktop 已启动并使用 Linux containers；安装 kubectl 和 kind，确保 Docker 有足够磁盘空间。Jupyter 镜像解压后约 8.44 GB，Docker 和 kind 节点各自保存镜像，首次部署需为镜像及数据预留额外空间。
+Docker Desktop 已启动并使用 Linux containers；安装 kubectl 和 kind，确保 Docker 有足够磁盘空间。1.13.0-rc7 Jupyter 镜像在用户机器上的 Docker 磁盘占用约 17.3 GB，Docker 和 kind 节点各自保存镜像，首次部署需为镜像及数据预留额外空间。
 
 本次运行环境：Docker Engine 29.6.1，Docker 可用内存约 15.5 GiB。主机的 4000、8080、8888 端口须空闲。
 
@@ -39,10 +39,10 @@ $env:PATH = "$env:USERPROFILE/.local/bin;$env:PATH"
 # 仅首次创建；已有集群时直接跳过这一行
 kind create cluster --name mlrun --config hack/local/kind/cluster.yaml --wait 180s
 
-docker pull mlrun/mlrun-api:1.7.0
-docker pull mlrun/mlrun-ui:1.7.0
-docker pull mlrun/jupyter:1.7.0
-kind load docker-image mlrun/mlrun-api:1.7.0 mlrun/mlrun-ui:1.7.0 mlrun/jupyter:1.7.0 --name mlrun
+docker pull mlrun/mlrun-api:1.13.0-rc7
+docker pull mlrun/mlrun-ui:1.13.0-rc7
+docker pull mlrun/jupyter:1.13.0-rc7
+kind load docker-image mlrun/mlrun-api:1.13.0-rc7 mlrun/mlrun-ui:1.13.0-rc7 mlrun/jupyter:1.13.0-rc7 --name mlrun
 
 kubectl --context kind-mlrun apply -f hack/local/kind/mlrun.yaml
 kubectl --context kind-mlrun -n mlrun rollout status deployment/mlrun-api --timeout=600s
@@ -53,6 +53,27 @@ kubectl --context kind-mlrun -n mlrun get pods,svc,pvc
 
 每条命令成功后再继续下一条。首次导入 Jupyter 大镜像可能耗时数分钟。后续启动无需重新创建集群或下载镜像，运行 `kubectl apply` 即可。
 
+## 已有集群更新镜像版本
+
+如果已经下载并导入 1.13.0-rc7 镜像，无需重新创建集群。更新代码后重新应用清单，才会触发 Deployment 使用新镜像：
+
+```powershell
+git pull --ff-only origin development
+kubectl --context kind-mlrun apply -f hack/local/kind/mlrun.yaml
+kubectl --context kind-mlrun -n mlrun get deployments -o custom-columns=NAME:.metadata.name,IMAGE:.spec.template.spec.containers[0].image
+kubectl --context kind-mlrun -n mlrun rollout status deployment/mlrun-api --timeout=600s
+kubectl --context kind-mlrun -n mlrun rollout status deployment/mlrun-ui --timeout=600s
+kubectl --context kind-mlrun -n mlrun rollout status deployment/jupyter-notebook --timeout=600s
+```
+
+已有业务数据时，在版本升级前备份持久卷；API 启动可能执行数据库迁移。若停在 `0 of 1 updated replicas are available`，请查看 Pod 状态和启动日志，而不是重复导入镜像：
+
+```powershell
+kubectl --context kind-mlrun -n mlrun get pods
+kubectl --context kind-mlrun -n mlrun describe pods -l app=mlrun-api
+kubectl --context kind-mlrun -n mlrun logs deployment/mlrun-api --tail=100
+```
+
 ## 访问与健康检查
 
 | 入口 | 本机地址 | 集群 Service / 目标端口 |
@@ -61,7 +82,7 @@ kubectl --context kind-mlrun -n mlrun get pods,svc,pvc
 | MLRun API | http://127.0.0.1:8080 | mlrun-api:8080 → 8080 |
 | JupyterLab | http://127.0.0.1:8888/lab | jupyter-notebook:8888 → 8888 |
 
-UI 经 Nginx 将 `/api` 转发给 `http://mlrun-api.mlrun.svc.cluster.local:8080`。此处使用完整服务域名，避免 Nginx 动态 DNS 解析短服务名失败。1.7.0 UI 镜像实际监听 **8090**，所以本清单修正了旧示例中的容器端口 80。
+UI 经 Nginx 将 `/api` 转发给 `http://mlrun-api.mlrun.svc.cluster.local:8080`。此处使用完整服务域名，避免 Nginx 动态 DNS 解析短服务名失败。本清单沿用此前验证的 UI 目标端口 **8090**；升级后若探针失败，应结合新镜像日志确认实际监听端口。
 
 ```powershell
 curl.exe --fail http://127.0.0.1:8080/api/healthz
@@ -88,7 +109,7 @@ project = mlrun.get_or_create_project(
 )
 function = mlrun.new_function(
     name="k8s-smoke", project=project.name,
-    kind="job", image="mlrun/jupyter:1.7.0",
+    kind="job", image="mlrun/jupyter:1.13.0-rc7",
 )
 function.apply(mlrun.platforms.mount_pvc(
     pvc_name="mlrun-data", volume_mount_path="/home/jovyan/data"
@@ -138,7 +159,9 @@ kubectl --context kind-mlrun apply -f hack/local/kind/mlrun.yaml
 - Spark/MPI 资源不存在的日志：本方案没有安装相应 CRD，不能据此判断普通 job 运行失败；需要这些运行时再安装相应 Operator。
 - 端口占用：首次创建集群前修改 `cluster.yaml` 中的 `hostPort`。已有集群修改文件不会自动更新 Docker 端口映射。
 
-## 本次验收记录（2026-09-07）
+## 历史验收记录（1.7.0，2026-09-07）
+
+以下记录仅对应旧版 1.7.0，不代表 1.13.0-rc7 已完成运行验证。新版清单的结构校验不能代替升级后的服务就绪检查和作业测试。
 
 - 三个 Deployment 均为 `1/1` Ready，两个 PVC 均为 Bound。
 - API 健康检查、项目列表、UI 首页、UI 代理项目列表、JupyterLab 均返回 HTTP 200。

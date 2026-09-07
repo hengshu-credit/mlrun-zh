@@ -49,7 +49,7 @@ spec:
     spec:
       containers:
       - name: mlrun-api
-        image: mlrun/mlrun-api:1.7.0
+        image: mlrun/mlrun-api:1.13.0-rc7
         env:
         - name: MLRUN_NAMESPACE
           valueFrom:
@@ -139,7 +139,7 @@ spec:
     spec:
       containers:
       - name: mlrun-ui
-        image: mlrun/mlrun-ui:1.7.0
+        image: mlrun/mlrun-ui:1.13.0-rc7
         env:
         - name: MLRUN_API_PROXY_URL
           value: http://mlrun-api.mlrun.svc.cluster.local:8080
@@ -334,7 +334,7 @@ spec:
     spec:
       containers:
       - name: jupyter-notebook
-        image: mlrun/jupyter:1.7.0
+        image: mlrun/jupyter:1.13.0-rc7
         env:
         - name: MLRUN_NAMESPACE
           valueFrom:
