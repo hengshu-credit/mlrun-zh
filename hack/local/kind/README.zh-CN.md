@@ -87,7 +87,7 @@ kubectl --context kind-mlrun -n mlrun logs deployment/mlrun-api --tail=100
 | MLRun API | http://127.0.0.1:8080 | mlrun-api:8080 → 8080 |
 | JupyterLab | http://127.0.0.1:8888/lab | jupyter-notebook:8888 → 8888 |
 
-UI 经 Nginx 将 `/api` 转发给 `http://mlrun-api.mlrun.svc.cluster.local:8080`。此处使用完整服务域名，避免 Nginx 动态 DNS 解析短服务名失败。本清单沿用此前验证的 UI 目标端口 **8090**；升级后若探针失败，应结合新镜像日志确认实际监听端口。
+UI 经 Nginx 将 `/api` 转发给 `http://mlrun-api.mlrun.svc.cluster.local:8080`。此处使用完整服务域名，避免 Nginx 动态 DNS 解析短服务名失败。已检查 1.13.0-rc7 UI 镜像的 Nginx 配置，监听端口仍为 **8090**。
 
 ```powershell
 curl.exe --fail http://127.0.0.1:8080/api/healthz
@@ -107,7 +107,7 @@ Jupyter 中已配置 `MLRUN_DBPATH=http://mlrun-api:8080`。主机 Python SDK �
 
 ```python
 import mlrun
-import mlrun.platforms
+import mlrun.runtimes.mounts
 
 project = mlrun.get_or_create_project(
     "deployment-smoke", context="/tmp/deployment-smoke", user_project=False
@@ -116,7 +116,7 @@ function = mlrun.new_function(
     name="k8s-smoke", project=project.name,
     kind="job", image="mlrun/jupyter:1.13.0-rc7",
 )
-function.apply(mlrun.platforms.mount_pvc(
+function.apply(mlrun.runtimes.mounts.mount_pvc(
     pvc_name="mlrun-data", volume_mount_path="/home/jovyan/data"
 ))
 function.with_code(body='def handler(context):\n    context.log_result("answer", 42)\n')
@@ -209,6 +209,27 @@ kubectl --context kind-mlrun apply -f hack/local/kind/mlrun.yaml
 - UI 探针连接拒绝：检查目标端口是否是 `8090`。
 - Spark/MPI 资源不存在的日志：本方案没有安装相应 CRD，不能据此判断普通 job 运行失败；需要这些运行时再安装相应 Operator。
 - 端口占用：首次创建集群前修改 `cluster.yaml` 中的 `hostPort`。已有集群修改文件不会自动更新 Docker 端口映射。
+
+## 1.13.0-rc7 验收记录（2026-09-07）
+
+- API、UI、Jupyter 的 Deployment 均使用 1.13.0-rc7，均为 1/1 Ready。
+- API 健康检查、项目列表、UI 首页、UI API 代理与 JupyterLab 均返回 HTTP 200。
+- 新版 SDK 作业挂载使用 `mlrun.runtimes.mounts.mount_pvc`；旧的 `mlrun.platforms.mount_pvc` 已不可用。
+- Kubernetes 作业 `k8s-smoke-handler-hkmzc` 完成，结果 `answer=42`；项目 `deployment-smoke`，运行 UID `94e49a0dd6bf49419a1576068b1663cb`。
+- 本次为原 kind 容器不存在后的重新创建，未验证旧数据库跨版本迁移，也未恢复原集群数据。
+- 本机 8080 端口无法绑定，因此在不修改通用清单的前提下，使用下列本机集群配置将 API 主机端口改为 18080。当前访问入口为 UI `http://127.0.0.1:4000`、API `http://127.0.0.1:18080`、Jupyter `http://127.0.0.1:8888/lab`。
+
+仅在首次创建且 8080 不可用时，生成本机配置替代上文的 create 命令（已有集群不要重复创建）：
+
+```powershell
+New-Item -ItemType Directory -Force playground | Out-Null
+(Get-Content hack/local/kind/cluster.yaml -Raw).Replace('hostPort: 8080', 'hostPort: 18080') | Set-Content playground/cluster.local.yaml
+kind create cluster --name mlrun --config playground/cluster.local.yaml --wait 180s
+```
+
+使用此替代配置后，将主机访问和健康检查 URL 中的 8080 替换为 18080；集群内部服务端口继续使用 8080。
+
+本次节点可直接访问镜像仓库，因此通过 `kubectl apply` 触发节点下载，没有执行 `kind load`。若节点能访问仓库，可省略宿主机 `docker pull` 和 `kind load` 两组命令；若节点无法下载，则使用本文的预拉取和导入步骤。两种方式选择一种即可。
 
 ## 历史验收记录（1.7.0，2026-09-07）
 
