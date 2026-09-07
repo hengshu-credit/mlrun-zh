@@ -1,0 +1,103 @@
+--- a/src/components/Workflow/workflow.util.js
++++ b/src/components/Workflow/workflow.util.js
+@@ -303,7 +303,14 @@
+   }
+ }
+ 
+-export const fetchMissingProjectsPermissions = async (projectNames, currentMap, dispatch) => {
++export const fetchMissingProjectsPermissions = async (
++  projectNames,
++  currentMap,
++  dispatch,
++  authentication
++) => {
++  // Wait for frontend-spec; only an explicit no-auth response skips authorization.
++  if (!authentication) return
+   const uniqueProjects = [...new Set(projectNames)]
+   const missingProjects = uniqueProjects.filter(projectName => !(projectName in currentMap))
+   if (missingProjects.length === 0) return
+@@ -311,6 +318,8 @@
+   const newMap = Object.fromEntries(
+     await Promise.all(
+       missingProjects.map(async projectName => {
++        if (authentication === 'none') return [projectName, true]
++
+         try {
+           await projectsIguazioApi.getProjectOwnerVisibility(projectName)
+           return [projectName, true]
+@@ -330,18 +339,9 @@
+   dispatch(setAccessibleProjectsMap(mergedMap))
+ }
+ 
+-export const fetchMissingProjectPermission = async (projectName, currentMap, dispatch) => {
+-  if (projectName in currentMap) return
+-
+-  const hasPermission = await projectsIguazioApi
+-    .getProjectOwnerVisibility(projectName)
+-    .then(() => true)
+-    .catch(() =>
+-      projectsIguazioApi
+-        .getProjectWorkflowsUpdateAuthorization(projectName)
+-        .then(() => true)
+-        .catch(() => false)
+-    )
+-
+-  dispatch(setAccessibleProjectsMap(Object.fromEntries([[projectName, hasPermission]])))
+-}
++export const fetchMissingProjectPermission = async (
++  projectName,
++  currentMap,
++  dispatch,
++  authentication
++) => fetchMissingProjectsPermissions([projectName], currentMap, dispatch, authentication)
+--- a/src/components/Workflow/Workflow.jsx
++++ b/src/components/Workflow/Workflow.jsx
+@@ -94,11 +94,14 @@
+   const projectName = params.workflowProjectName || params.projectName
+   const dispatch = useDispatch()
+   const ce = useSelector(store => store.appStore.frontendSpec?.ce?.version)
++  const authentication = useSelector(
++    store => store.appStore.frontendSpec?.feature_flags?.authentication
++  )
+   const accessibleProjectsMap = useSelector(state => state.projectStore.accessibleProjectsMap)
+ 
+   useEffect(() => {
+-    fetchMissingProjectPermission(projectName, accessibleProjectsMap, dispatch)
+-  }, [dispatch, projectName, accessibleProjectsMap])
++    fetchMissingProjectPermission(projectName, accessibleProjectsMap, dispatch, authentication)
++  }, [dispatch, projectName, accessibleProjectsMap, authentication])
+ 
+   const graphViewClassNames = classnames(
+     'graph-view',
+--- a/src/elements/WorkflowsTable/WorkflowsTable.jsx
++++ b/src/elements/WorkflowsTable/WorkflowsTable.jsx
+@@ -105,6 +105,7 @@
+     const workflowsStore = useSelector(state => state.workflowsStore)
+     const filtersStore = useSelector(state => state.filtersStore)
+     const appStore = useSelector(store => store.appStore)
++    const authentication = appStore.frontendSpec?.feature_flags?.authentication
+     const params = useParams()
+     const dispatch = useDispatch()
+     const navigate = useNavigate()
+@@ -132,12 +133,15 @@
+       const projectNames = workflowsStore.workflows.data.map(workflow => workflow.project)
+       setPermissionsLoading(true)
+       projectNames &&
+-        fetchMissingProjectsPermissions(projectNames, accessibleProjectsMap, dispatch).finally(
+-          () => {
+-            setPermissionsLoading(false)
+-          }
+-        )
+-    }, [dispatch, workflowsStore.workflows.data, accessibleProjectsMap])
++        fetchMissingProjectsPermissions(
++          projectNames,
++          accessibleProjectsMap,
++          dispatch,
++          authentication
++        ).finally(() => {
++          setPermissionsLoading(false)
++        })
++    }, [dispatch, workflowsStore.workflows.data, accessibleProjectsMap, authentication])
+ 
+     const monitorWorkflowsRowHeight = useMemo(
+       () => getScssVariableValue('--monitorWorkflowsRowHeight'),

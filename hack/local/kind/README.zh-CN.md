@@ -8,7 +8,8 @@
 
 | 组件 | 安装版本 |
 | --- | --- |
-| MLRun API / UI / Jupyter / 计算镜像 | 1.13.0-rc7 |
+| MLRun API / Jupyter / 计算镜像 | 1.13.0-rc7 |
+| MLRun UI | 1.13.0-rc7-local.1（官方 rc7 源码 + 本地权限修复）|
 | kind / Kubernetes | 0.33.0 / 1.37.0 |
 | Kubeflow Pipelines 服务端 / Driver / Launcher | 2.17.2 |
 | Argo Workflows | 4.0.5 |
@@ -31,6 +32,7 @@
 - MLRun 只支持 MPIJob `v1`/`v1alpha1`，不能直接改用仅提供 `v2beta1` 的最新 MPI Operator。配置使用受支持的 `v1`。
 - Spark 计算镜像保留 MLRun CE 使用的 Spark 3.5 系列；MySQL、SeaweedFS、ML Metadata 随 KFP 清单配套，不独立替换存储格式或协议。
 - 采用发布镜像，不会自动加载当前工作区 Python 源码。修改 SDK/API 代码须另行构建镜像。
+- UI 基于官方 rc7 对应提交 `c4235698cba093958c02281cd20dbe0ab380230e` 构建。修复工作流列表和执行图在无认证模式下错误访问 Iguazio 权限接口的问题；其余认证模式继续检查权限。源码补丁及 10 项回归测试位于 `ui/`，基础镜像 digest、源码包 SHA256 和上游 npm lock 均固定。
 
 这是完整功能的单节点开发部署。API 仍使用已有 SQLite 数据库以保留项目数据；共享卷使用 kind 本地存储，未配置生产级高可用、外部身份认证或 TLS。
 
@@ -38,9 +40,10 @@
 
 - Docker Desktop 已启动，使用 Linux containers。
 - 安装 `kubectl`、`kind`、Helm 3，确保命令在 PATH 中。此次实际使用 Helm 3.18.6。
+- 安装 Git、Node.js 22 或更新版本（含 npm）；用于构建 UI 修复镜像。本机使用 Node.js 26.4.0 验证。
 - 建议为 Docker 分配至少 16 GiB 内存；本机完整部署和模型监控运行时约占 12～13 GiB，训练或并行构建需要额外余量。
 - 镜像和构建缓存较大，建议预留至少 80 GB 实际磁盘空间。Jupyter 镜像的 Docker 磁盘占用约 17.3 GB，Docker 与节点 containerd 缓存独立。
-- 需要访问 Docker Hub、GHCR、Quay、registry.k8s.io、GCR 和 PyPI。脚本的 `-Proxy` 仅用于下载 Helm 包；容器拉取镜像仍依赖 Docker/节点的网络配置。
+- 需要访问 Docker Hub、GHCR、Quay、registry.k8s.io、GCR、PyPI、GitHub codeload 和 npm registry。脚本的 `-Proxy` 用于下载 Helm 包、UI 源码和 npm 依赖；容器拉取镜像仍依赖 Docker/节点的网络配置。
 
 ```powershell
 docker version
@@ -70,9 +73,9 @@ kind create cluster --name mlrun --config hack/local/kind/cluster.yaml --wait 18
 
 本机已下载的 Helm 位于 `playground/helm/windows-amd64/helm.exe`，该目录不进入 Git；其他机器需自行安装 Helm。
 
-默认由 Kubernetes 直接下载镜像，不必先执行 `docker pull` 和 `kind load`。只有节点无法下载、宿主机可以下载时，才使用下方的镜像导入流程。
+发布镜像默认由 Kubernetes 直接下载，不必先执行 `docker pull` 和 `kind load`。UI 修复镜像由脚本在宿主机自动构建并导入 kind，不依赖公共仓库提供 `local.1` 标签。只有节点无法下载、宿主机可以下载时，才使用下方的镜像导入流程。
 
-脚本依次创建核心资源和随机凭据、安装 KFP/Argo 与 Operators、配置本地 HTTP 镜像仓库信任、安装 Kafka/TimescaleDB/监控、准备工作流 SDK 并等待所有 Deployment 就绪。`pipeline-sdk.yaml` 将编译器安装到共享 PVC 的 `.mlrun-kfp1`，通过 PYTHONPATH 加载，保留 MLRun 发布镜像内的核心 Python 依赖。
+脚本首先调用 `build-ui.ps1` 下载固定 UI 源码、应用补丁、执行权限测试和前端构建，并将小型 UI 镜像导入 kind；之后创建核心资源和随机凭据、安装 KFP/Argo 与 Operators、配置本地 HTTP 镜像仓库信任、安装 Kafka/TimescaleDB/监控、准备工作流 SDK 并等待所有 Deployment 就绪。UI 源码和 npm 缓存位于忽略的 `playground/ui-release/`。`pipeline-sdk.yaml` 将编译器安装到共享 PVC 的 `.mlrun-kfp1`，通过 PYTHONPATH 加载，保留 MLRun 发布镜像内的核心 Python 依赖。
 
 已有集群不要删除重建。`cluster.yaml` 只控制首次创建的 Docker 端口映射；修改它不会改变已有节点的主机端口。此前以 API 8080 创建的机器仍使用原端口，或额外运行 `kubectl --context kind-mlrun -n mlrun port-forward svc/mlrun-api 18080:8080`。
 
@@ -122,6 +125,7 @@ curl.exe --fail http://127.0.0.1:4000/mlrun/nuclio/api/functions
 - OpenTelemetry 指标已被 Prometheus 抓取；Grafana 配置了 MLRun 平台概览，包含项目、函数、模型端点、API 请求量和延迟。
 - 自动挂载 PVC 的 Kubernetes 作业读取到了 Notebook 生成的数据集。原来失败的 `trainer`/`auto-trainer` 记录予以保留，不代表新部署未就绪。
 - 浏览器验证通过项目概览、工作流列表/执行图/任务详情，以及模型端点列表/监控详情；Nuclio 概览正确显示 4 个 Running 函数。
+- UI 权限修复后，重新加载工作流列表和直接打开执行图的网络记录中均无 Iguazio authorization 请求或 HTTP 错误；10 项权限回归测试与修改文件的 ESLint 检查通过。
 - Spark/MPI Operator 与 CRD 已安装；未对用户的实际 Spark/MPI 分布式训练进行验收。
 
 ## Notebook 作业与模型监控
@@ -194,6 +198,24 @@ kubectl --context kind-mlrun -n mlrun rollout restart deployment/mlrun-api deplo
 
 ## loading / 启动等待排查
 
+### 工作流权限接口 404
+
+如果浏览器请求 `/api/projects/__name__/<project>/authorization` 返回 404，这是 rc7 UI 错误调用了 Iguazio 专用权限接口。本地 API 的 `/api/frontend-spec` 返回 `feature_flags.authentication: none`，无须部署 Iguazio 或切换端口。
+
+已有完整部署只更新 UI，执行以下命令即可；`install-full.ps1` 也已包含此构建步骤：
+
+```powershell
+git pull origin development
+./hack/local/kind/build-ui.ps1
+# 需要网络代理时：./hack/local/kind/build-ui.ps1 -Proxy http://127.0.0.1:7897
+kubectl --context kind-mlrun apply -f hack/local/kind/mlrun.yaml
+kubectl --context kind-mlrun -n mlrun rollout status deployment/mlrun-ui --timeout=180s
+```
+
+完成后在浏览器按 `Ctrl+F5`。修复只在服务端明确声明 `none` 时跳过 Iguazio 权限检查；配置尚未加载时等待，其他认证模式保留原有授权检查。没有添加返回假成功的后端接口，也没有修改服务端鉴权。
+
+### 镜像导入与 Pod 就绪
+
 `kind load docker-image` 是镜像导入，不是服务启动；大型镜像没有持续百分比输出。保留导入终端，在另一个终端检查：
 
 ```powershell
@@ -207,8 +229,8 @@ CPU 和 BLOCK I/O 持续变化通常说明正在传输或解包。磁盘充足�
 ```powershell
 docker pull mlrun/mlrun-api:1.13.0-rc7
 kind load docker-image mlrun/mlrun-api:1.13.0-rc7 --name mlrun -v 6
-docker pull mlrun/mlrun-ui:1.13.0-rc7
-kind load docker-image mlrun/mlrun-ui:1.13.0-rc7 --name mlrun -v 6
+# UI 必须使用修复版，不能只导入原始 rc7 镜像。
+./hack/local/kind/build-ui.ps1
 docker pull mlrun/jupyter:1.13.0-rc7
 kind load docker-image mlrun/jupyter:1.13.0-rc7 --name mlrun -v 6
 ```
@@ -237,6 +259,7 @@ kubectl --context kind-mlrun -n mlrun logs <pod-name> --previous --tail=100
 ## 上游来源
 
 - [MLRun CE](https://github.com/mlrun/ce)
+- [MLRun rc7 UI 源码](https://github.com/mlrun/ui/tree/c4235698cba093958c02281cd20dbe0ab380230e)
 - [KFP 2.17.2](https://github.com/kubeflow/pipelines/tree/2.17.2/manifests)
 - [Nuclio Helm](https://nuclio.github.io/nuclio/charts/)
 - [Metrics Server](https://github.com/kubernetes-sigs/metrics-server/releases)

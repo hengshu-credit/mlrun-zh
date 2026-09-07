@@ -32,6 +32,9 @@ function New-Password {
 
 Get-Command kubectl, docker, $HelmPath -ErrorAction Stop | Out-Null
 Invoke-Checked kubectl @('--context',$Context,'get','nodes')
+# Build and import the CE workflow permission fix before changing any workloads.
+if (-not $Context.StartsWith('kind-')) { throw 'This installer requires a kind context.' }
+& "$PSScriptRoot/build-ui.ps1" -ClusterName $Context.Substring(5) -Proxy $Proxy
 Invoke-Checked kubectl @('--context',$Context,'apply','-f',"$PSScriptRoot/mlrun.yaml")
 New-LocalSecret 'grafana-admin' @{'admin-user'='admin'; 'admin-password'=(New-Password)}
 New-LocalSecret 'mlrun-platform-credentials' @{
