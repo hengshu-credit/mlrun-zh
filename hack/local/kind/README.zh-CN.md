@@ -15,9 +15,9 @@
 
 Docker Desktop 已启动并使用 Linux containers；安装 kubectl 和 kind，确保 Docker 有足够磁盘空间。1.13.0-rc7 Jupyter 镜像在用户机器上的 Docker 磁盘占用约 17.3 GB，Docker 和 kind 节点各自保存镜像，首次部署需为镜像及数据预留额外空间。
 
-本次运行环境：Docker Engine 29.6.1，Docker 可用内存约 15.5 GiB。主机的 4000、8080、8888 端口须空闲。
+此前验证环境为 Docker Engine 29.6.1、Docker 可用内存约 15.5 GiB；这不是最低配置要求。主机的 4000、8080、8888 端口须空闲。
 
-kind 安装位置：`C:\Users\Administrator\.local\bin\kind.exe`。如未安装，可在 PowerShell 中执行：
+kind 安装到当前用户的 `$env:USERPROFILE/.local/bin`。如未安装，可在 PowerShell 中执行：
 
 ```powershell
 New-Item -ItemType Directory -Force "$env:USERPROFILE/.local/bin" | Out-Null
@@ -30,19 +30,24 @@ kubectl version --client
 
 若 GitHub 直连超时，使用你自己的网络代理。本次下载通过本机 `http://127.0.0.1:7897` 完成；可在 curl 命令中增加 `--proxy http://127.0.0.1:7897`，该端口不是项目依赖。
 
-## 启动
+## 首次部署
 
 ```powershell
-Set-Location E:\workspace\mlrun
+# 先进入你自己的 mlrun 仓库目录，例如：
+Set-Location "$env:USERPROFILE/Documents/GitHub/mlrun"
 $env:PATH = "$env:USERPROFILE/.local/bin;$env:PATH"
 
-# 仅首次创建；已有集群时直接跳过这一行
+# 先检查已有集群；如果已列出 mlrun，不执行下一条 create 命令
+kind get clusters
 kind create cluster --name mlrun --config hack/local/kind/cluster.yaml --wait 180s
 
 docker pull mlrun/mlrun-api:1.13.0-rc7
 docker pull mlrun/mlrun-ui:1.13.0-rc7
 docker pull mlrun/jupyter:1.13.0-rc7
-kind load docker-image mlrun/mlrun-api:1.13.0-rc7 mlrun/mlrun-ui:1.13.0-rc7 mlrun/jupyter:1.13.0-rc7 --name mlrun
+# 逐个导入，便于识别具体耗时的镜像；每条完成后再执行下一条
+kind load docker-image mlrun/mlrun-ui:1.13.0-rc7 --name mlrun -v 6
+kind load docker-image mlrun/mlrun-api:1.13.0-rc7 --name mlrun -v 6
+kind load docker-image mlrun/jupyter:1.13.0-rc7 --name mlrun -v 6
 
 kubectl --context kind-mlrun apply -f hack/local/kind/mlrun.yaml
 kubectl --context kind-mlrun -n mlrun rollout status deployment/mlrun-api --timeout=600s
@@ -51,11 +56,11 @@ kubectl --context kind-mlrun -n mlrun rollout status deployment/jupyter-notebook
 kubectl --context kind-mlrun -n mlrun get pods,svc,pvc
 ```
 
-每条命令成功后再继续下一条。首次导入 Jupyter 大镜像可能耗时数分钟。后续启动无需重新创建集群或下载镜像，运行 `kubectl apply` 即可。
+每条命令成功后再继续下一条；PowerShell 中可用 `$LASTEXITCODE` 检查上一条原生命令退出码，非 0 时先排错。首次导入 Jupyter 大镜像可能耗时较长，具体取决于磁盘和 Docker 资源，不保证固定完成时间。后续启动无需重新创建集群或下载镜像，运行 `kubectl apply` 即可。
 
 ## 已有集群更新镜像版本
 
-如果已经下载并导入 1.13.0-rc7 镜像，无需重新创建集群。更新代码后重新应用清单，才会触发 Deployment 使用新镜像：
+先确认当前分支为 `development`，本地修改已提交或妥善保存。如果已经下载并导入 1.13.0-rc7 镜像，无需重新创建集群；否则先执行上面的镜像下载和导入命令。更新代码后重新应用清单，才会触发 Deployment 使用新镜像：
 
 ```powershell
 git pull --ff-only origin development
@@ -132,6 +137,52 @@ assert run.status.results["answer"] == 42
 使用 kind 默认 `standard` StorageClass 和 ReadWriteOnce PVC；两个应用在同一节点上共享数据卷。Notebook 请保存到 `/home/jovyan/data`，其他目录不会随 Pod 重建保留。
 
 Pod 重启或重新应用清单不会删除 PVC。**删除 kind 集群会丢失节点内的卷数据**；删除命名空间/PVC 也可能触发存储回收。删除前须导出备份。多节点部署应改用适合实际集群的共享存储，不能直接沿用此单节点配置。
+
+## 区分镜像导入与服务启动等待
+
+### kind 一直显示 loading
+
+`kind load docker-image` 将宿主机 Docker 镜像导入节点 containerd，并不启动应用。两处缓存独立，Docker 中看到镜像不代表节点已可使用；导入过程可能没有百分比输出。
+
+保留导入窗口，在另一个 PowerShell 窗口检查：
+
+```powershell
+# 持续显示统计，观察 BLOCK I/O 是否随时间增长；Ctrl+C 仅退出统计
+docker stats mlrun-control-plane
+
+# 查看已可见的镜像及版本
+docker exec mlrun-control-plane crictl images | Select-String "mlrun"
+
+# 检查节点文件系统空间
+docker exec mlrun-control-plane df -h /var/lib/containerd
+```
+
+磁盘写入持续增加、CPU 活跃，说明节点仍有处理活动，但不能单独证明一定能导入成功。镜像列表暂时为空也不足以证明卡死。节点空间充足时，仍需检查 Windows 上 Docker 虚拟磁盘所在驱动器的剩余空间。
+
+不要并发重复运行导入，也不要为此删除集群。若持续十几分钟无读写变化，保留日志后中断原导入，再使用首次部署中的逐镜像 `-v 6` 命令定位。`--name` 必须是 `mlrun`，不要写成 `mlru`。
+
+### rollout 一直显示 0 of 1 updated replicas are available
+
+这表示 Deployment 的 Pod 尚未 Ready，已经进入应用部署阶段。`--timeout=600s` 只规定等待上限，延长时间不能解决错误。另开窗口执行：
+
+```powershell
+kubectl --context kind-mlrun -n mlrun get pods -o wide
+kubectl --context kind-mlrun -n mlrun get deployments -o custom-columns=NAME:.metadata.name,IMAGE:.spec.template.spec.containers[0].image
+kubectl --context kind-mlrun -n mlrun describe pods -l app=mlrun-api
+kubectl --context kind-mlrun -n mlrun logs deployment/mlrun-api --tail=100
+# 仅在容器曾重启时查看上一次退出日志
+kubectl --context kind-mlrun -n mlrun logs deployment/mlrun-api --previous --tail=100
+```
+
+| 状态或事件 | 排查方向 |
+| --- | --- |
+| Pending / FailedScheduling | 资源不足、PVC 未绑定；查看 describe 的 Events |
+| ErrImagePull / ImagePullBackOff | 镜像标签、网络与导入目标；确认清单也是 1.13.0-rc7 |
+| ContainerCreating | 查看是否仍在拉取镜像、挂载卷或创建容器 |
+| CrashLoopBackOff / Error | 查看当前及 previous 日志，定位进程退出原因 |
+| Running 但 0/1 Ready | 查看启动/就绪探针事件、监听端口及应用初始化日志 |
+
+只执行 `docker pull` 和 `kind load` 不会修改 Deployment；必须更新仓库并执行 `kubectl apply`。如果远端更新与本地编辑冲突，先处理 Git 冲突，不能跳过更新继续使用旧清单。
 
 ## 日常操作与排错
 
