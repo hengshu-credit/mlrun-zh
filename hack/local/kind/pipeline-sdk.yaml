@@ -1,0 +1,45 @@
+# KFP server 2.17.2 retains v1 APIs. MLRun 1.13.0-rc7 uses its v1 adapter.
+# Overlay only the compiler packages; preserve the MLRun image dependencies.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mlrun-pipeline-sdk
+  namespace: mlrun
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: install
+        image: mlrun/jupyter:1.13.0-rc7
+        command:
+        - python
+        - -m
+        - pip
+        - install
+        args:
+        - --no-deps
+        - --upgrade
+        - --target
+        - /home/jovyan/data/.mlrun-kfp1
+        - kfp==1.8.24
+        - kfp-pipeline-spec==0.2.2
+        - kfp-server-api==1.8.5
+        - deprecated==1.2.18
+        - fire==0.7.1
+        - uritemplate==3.0.1
+        - strip-hints==0.1.13
+        - absl-py==1.4.0
+        - google-api-python-client==1.12.11
+        - requests-toolbelt==1.0.0
+        - typer==0.9.4
+        - httplib2==0.22.0
+        - google-auth-httplib2==0.2.0
+        volumeMounts:
+        - name: data
+          mountPath: /home/jovyan/data
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: mlrun-data

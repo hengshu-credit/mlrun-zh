@@ -1,0 +1,26 @@
+fullnameOverride: nuclio
+controller:
+  enabled: true
+dashboard:
+  enabled: true
+  containerBuilderKind: kaniko
+  ingress:
+    enabled: false
+  build:
+    insecurePushRegistry: true
+autoscaler:
+  enabled: false
+dlx:
+  enabled: false
+rbac:
+  create: true
+  crdAccessMode: namespaced
+crd:
+  create: true
+registry:
+  pushPullUrl: mlrun-registry.mlrun.svc.cluster.local:5000
+platform:
+  projectsLeader:
+    kind: mlrun
+    synchronizationInterval: 1m
+    apiAddress: http://mlrun-api:8080/api

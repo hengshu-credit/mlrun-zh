@@ -1,0 +1,44 @@
+[
+  {
+    "name": "nuclio",
+    "version": "0.23.6",
+    "appVersion": "1.17.6",
+    "url": "https://nuclio.github.io/nuclio/charts/nuclio-0.23.6.tgz",
+    "sha256": "f1dee035b8e9bce8032dd7f2708d3f5a2ac87a71cbc7abdc3ce1d670308ce785"
+  },
+  {
+    "name": "kube-prometheus-stack",
+    "version": "90.0.0",
+    "appVersion": "v0.93.1",
+    "url": "https://github.com/prometheus-community/helm-charts/releases/download/kube-prometheus-stack-90.0.0/kube-prometheus-stack-90.0.0.tgz",
+    "sha256": "04b90a3f4aab4b40572585095331259bc8f00328e40f9ec588e54cdb9aa6a55f"
+  },
+  {
+    "name": "spark-operator",
+    "version": "2.5.2",
+    "appVersion": "2.5.2",
+    "url": "https://github.com/kubeflow/spark-operator/releases/download/v2.5.2/spark-operator-2.5.2.tgz",
+    "sha256": "762be5b8632ecfe12eb20fff54450ddae0427f09506422107c508a0d1d38655b"
+  },
+  {
+    "name": "strimzi-kafka-operator",
+    "version": "1.2.0",
+    "appVersion": "1.2.0",
+    "url": "https://github.com/strimzi/strimzi-kafka-operator/releases/download/1.2.0/strimzi-kafka-operator-helm-3-chart-1.2.0.tgz",
+    "sha256": "0f8a50b2f19bd99482f9fd6e17cf42902f72f9e594a136813ac3f0b7af422efd"
+  },
+  {
+    "name": "opentelemetry-operator",
+    "version": "0.122.0",
+    "appVersion": "0.158.0",
+    "url": "https://github.com/open-telemetry/opentelemetry-helm-charts/releases/download/opentelemetry-operator-0.122.0/opentelemetry-operator-0.122.0.tgz",
+    "sha256": "b66f9b937ab644e75c0042395dc85bfc041eb5c51d22719b944d3e2bf32b5e4b"
+  },
+  {
+    "name": "mpi-operator",
+    "version": "0.7.1",
+    "appVersion": "==0.2.0",
+    "url": "https://v3io.github.io/helm-charts/stable/mpi-operator-0.7.1.tgz",
+    "sha256": "882ac0178e518d79ddc946343acdab994fdaf1ede0d620c2325b95c050b18435"
+  }
+]

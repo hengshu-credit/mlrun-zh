@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mlrun-grafana-dashboard
+  namespace: mlrun
+  labels:
+    grafana_dashboard: '1'
+data:
+  mlrun-local.json: '{"uid": "mlrun-local", "title": "MLRun Local Platform", "schemaVersion":
+    39, "version": 1, "refresh": "30s", "time": {"from": "now-1h", "to": "now"}, "panels":
+    [{"id": 1, "title": "Projects", "type": "stat", "datasource": {"type": "prometheus",
+    "uid": "prometheus"}, "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0}, "targets":
+    [{"expr": "sum(mlrun_projects)", "refId": "A"}]}, {"id": 2, "title": "Functions",
+    "type": "stat", "datasource": {"type": "prometheus", "uid": "prometheus"}, "gridPos":
+    {"h": 4, "w": 6, "x": 6, "y": 0}, "targets": [{"expr": "sum(mlrun_functions)",
+    "refId": "A"}]}, {"id": 3, "title": "Model endpoints", "type": "stat", "datasource":
+    {"type": "prometheus", "uid": "prometheus"}, "gridPos": {"h": 4, "w": 6, "x":
+    12, "y": 0}, "targets": [{"expr": "sum(mlrun_model_endpoints)", "refId": "A"}]},
+    {"id": 4, "title": "Runs", "type": "stat", "datasource": {"type": "prometheus",
+    "uid": "prometheus"}, "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0}, "targets":
+    [{"expr": "sum(mlrun_runs)", "refId": "A"}]}, {"id": 5, "title": "API requests
+    / second", "type": "timeseries", "datasource": {"type": "prometheus", "uid": "prometheus"},
+    "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4}, "targets": [{"expr": "sum(rate(mlrun_rest_request_duration_milliseconds_count[5m]))",
+    "refId": "A"}]}, {"id": 6, "title": "API p95 latency (ms)", "type": "timeseries",
+    "datasource": {"type": "prometheus", "uid": "prometheus"}, "gridPos": {"h": 8,
+    "w": 12, "x": 12, "y": 4}, "targets": [{"expr": "histogram_quantile(0.95, sum
+    by (le) (rate(mlrun_rest_request_duration_milliseconds_bucket[5m])))", "refId":
+    "A"}]}]}'

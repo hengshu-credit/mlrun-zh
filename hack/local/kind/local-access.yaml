@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mlrun-local-access
+  namespace: mlrun
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values: [mlrun-api, mlrun-ui, jupyter-notebook]
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - port: 8080
+        - port: 8090
+        - port: 8888

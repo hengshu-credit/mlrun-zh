@@ -1,0 +1,73 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mlrun-timescaledb
+  namespace: mlrun
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: standard
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mlrun-timescaledb
+  namespace: mlrun
+spec:
+  selector:
+    app: mlrun-timescaledb
+  ports:
+    - name: postgres
+      port: 5432
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mlrun-timescaledb
+  namespace: mlrun
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: mlrun-timescaledb
+  template:
+    metadata:
+      labels:
+        app: mlrun-timescaledb
+    spec:
+      containers:
+        - name: postgres
+          image: timescale/timescaledb:2.29.2-pg17
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mlrun-platform-credentials
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              value: mlrun
+            - name: TIMESCALEDB_TELEMETRY
+              value: 'off'
+          ports:
+            - containerPort: 5432
+          readinessProbe:
+            exec:
+              command: [pg_isready, -U, postgres, -d, mlrun]
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: mlrun-timescaledb

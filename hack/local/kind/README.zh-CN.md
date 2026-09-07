@@ -1,250 +1,245 @@
-# MLRun 本地 Kubernetes 部署
+# MLRun 本地 Kubernetes 完整部署
 
-本方案在 Windows Docker Desktop 上使用 kind 创建单节点 Kubernetes，部署 MLRun API、UI 和 Jupyter。清单位于本目录的 `mlrun.yaml`，集群端口配置位于 `cluster.yaml`。所有命令从仓库根目录运行。
+本方案在 Windows Docker Desktop 的单节点 kind 集群中部署 MLRun 1.13.0-rc7，包含工作流、模型服务、模型监控、对象存储、镜像构建仓库及 Spark/MPI Operator。所有命令从仓库根目录运行。安装脚本保留已有集群、项目和 PVC。
 
-## 部署范围与版本
+## 版本与兼容性
 
-- kind：v0.33.0；Kubernetes 节点镜像：`kindest/node:v1.37.0`。
-- MLRun API、UI、Jupyter：均为 `1.13.0-rc7`。下载、kind 导入和本目录部署清单必须使用同一版本；上级目录的旧示例不适用于此版本。
-- 使用发布镜像，不会构建或加载当前工作区源码。修改 Python 源码后，需要另行构建对应镜像并更新 Deployment。
-- 集群名称 `mlrun`，kubectl context `kind-mlrun`，命名空间 `mlrun`。
-- 这是单节点开发/体验部署。未安装 Nuclio、Kubeflow Pipelines、Spark/MPI Operator、监控组件或镜像构建仓库；这些能力需要额外部署。
-- 使用 SQLite 和单副本 API，不是高可用生产环境。正式环境应单独设计数据库、共享存储、认证、TLS 和备份。
+以下是 2026-09-07～08 实际安装并验证的组合。Helm 下载地址及 SHA256 固定在 `charts.lock.json`，KFP/Argo 和 Metrics Server 清单保存在 `vendor/`，避免安装时混入浮动 `master` 镜像。
+
+| 组件 | 安装版本 |
+| --- | --- |
+| MLRun API / UI / Jupyter / 计算镜像 | 1.13.0-rc7 |
+| kind / Kubernetes | 0.33.0 / 1.37.0 |
+| Kubeflow Pipelines 服务端 / Driver / Launcher | 2.17.2 |
+| Argo Workflows | 4.0.5 |
+| Nuclio / Helm Chart | 1.17.6 / 0.23.6 |
+| Distribution 镜像仓库 | 3.1.1 |
+| Strimzi / Kafka（KRaft） | 1.2.0 / 4.3.1 |
+| TimescaleDB / PostgreSQL | 2.29.2 / 17.11 |
+| kube-prometheus-stack / Prometheus Operator | 90.0.0 / 0.93.1 |
+| Prometheus / Grafana / Alertmanager | 3.14.0 / 13.2.1 / 0.34.0 |
+| OpenTelemetry Operator / Collector | 0.158.0（Chart 0.122.0）/ 0.160.0 |
+| Metrics Server | 0.9.0 |
+| Spark Operator / Spark 默认计算镜像 | 2.5.2 / 3.5.6 |
+| MPI Operator / Chart | v0.2.3-igz / 0.7.1 |
+| SeaweedFS / KFP MySQL / ML Metadata | 4.34 / 8.4 / 1.14.0 |
+| MLRun 工作流编译 SDK / 发布镜像自带适配器 | KFP 1.8.24 / mlrun-pipelines-kfp-v1-8 0.8.0 |
+
+依赖优先使用新版，但保留以下兼容边界：
+
+- MLRun 1.13.0-rc7 发布镜像使用 KFP v1 适配器。验证发现 v2 适配器存在客户端接口、项目过滤和 PVC 挂载兼容问题，因此默认 Notebook 编译器保留 1.8.24，连接支持 v1 API 的 KFP 2.17.2 服务端。原生 KFP 2 工作流也已单独验证成功。
+- MLRun 只支持 MPIJob `v1`/`v1alpha1`，不能直接改用仅提供 `v2beta1` 的最新 MPI Operator。配置使用受支持的 `v1`。
+- Spark 计算镜像保留 MLRun CE 使用的 Spark 3.5 系列；MySQL、SeaweedFS、ML Metadata 随 KFP 清单配套，不独立替换存储格式或协议。
+- 采用发布镜像，不会自动加载当前工作区 Python 源码。修改 SDK/API 代码须另行构建镜像。
+
+这是完整功能的单节点开发部署。API 仍使用已有 SQLite 数据库以保留项目数据；共享卷使用 kind 本地存储，未配置生产级高可用、外部身份认证或 TLS。
 
 ## 前置条件
 
-Docker Desktop 已启动并使用 Linux containers；安装 kubectl 和 kind，确保 Docker 有足够磁盘空间。1.13.0-rc7 Jupyter 镜像在用户机器上的 Docker 磁盘占用约 17.3 GB，Docker 和 kind 节点各自保存镜像，首次部署需为镜像及数据预留额外空间。
-
-此前验证环境为 Docker Engine 29.6.1、Docker 可用内存约 15.5 GiB；这不是最低配置要求。主机的 4000、8080、8888 端口须空闲。
-
-kind 安装到当前用户的 `$env:USERPROFILE/.local/bin`。如未安装，可在 PowerShell 中执行：
+- Docker Desktop 已启动，使用 Linux containers。
+- 安装 `kubectl`、`kind`、Helm 3，确保命令在 PATH 中。此次实际使用 Helm 3.18.6。
+- 建议为 Docker 分配至少 16 GiB 内存；本机完整部署和模型监控运行时约占 12～13 GiB，训练或并行构建需要额外余量。
+- 镜像和构建缓存较大，建议预留至少 80 GB 实际磁盘空间。Jupyter 镜像的 Docker 磁盘占用约 17.3 GB，Docker 与节点 containerd 缓存独立。
+- 需要访问 Docker Hub、GHCR、Quay、registry.k8s.io、GCR 和 PyPI。脚本的 `-Proxy` 仅用于下载 Helm 包；容器拉取镜像仍依赖 Docker/节点的网络配置。
 
 ```powershell
-New-Item -ItemType Directory -Force "$env:USERPROFILE/.local/bin" | Out-Null
-curl.exe -fL -o "$env:USERPROFILE/.local/bin/kind.exe" https://github.com/kubernetes-sigs/kind/releases/download/v0.33.0/kind-windows-amd64
-$env:PATH = "$env:USERPROFILE/.local/bin;$env:PATH"
-kind version
 docker version
 kubectl version --client
+kind version
+helm version
 ```
 
-若 GitHub 直连超时，使用你自己的网络代理。本次下载通过本机 `http://127.0.0.1:7897` 完成；可在 curl 命令中增加 `--proxy http://127.0.0.1:7897`，该端口不是项目依赖。
+工具下载：[kind](https://kind.sigs.k8s.io/docs/user/quick-start/)、[Helm](https://helm.sh/docs/intro/install/)。
 
-## 首次部署
+## 首次创建与完整安装
 
 ```powershell
-# 先进入你自己的 mlrun 仓库目录，例如：
-Set-Location "$env:USERPROFILE/Documents/GitHub/mlrun"
-$env:PATH = "$env:USERPROFILE/.local/bin;$env:PATH"
-
-# 先检查已有集群；如果已列出 mlrun，不执行下一条 create 命令
+# 仅当列表中没有 mlrun 时，执行 create；已有集群直接跳过。
 kind get clusters
 kind create cluster --name mlrun --config hack/local/kind/cluster.yaml --wait 180s
 
-docker pull mlrun/mlrun-api:1.13.0-rc7
-docker pull mlrun/mlrun-ui:1.13.0-rc7
-docker pull mlrun/jupyter:1.13.0-rc7
-# 逐个导入，便于识别具体耗时的镜像；每条完成后再执行下一条
-kind load docker-image mlrun/mlrun-ui:1.13.0-rc7 --name mlrun -v 6
-kind load docker-image mlrun/mlrun-api:1.13.0-rc7 --name mlrun -v 6
-kind load docker-image mlrun/jupyter:1.13.0-rc7 --name mlrun -v 6
+# 安装/更新全部平台依赖；失败会停止，解决原因后可再次运行。
+./hack/local/kind/install-full.ps1
 
-kubectl --context kind-mlrun apply -f hack/local/kind/mlrun.yaml
-kubectl --context kind-mlrun -n mlrun rollout status deployment/mlrun-api --timeout=600s
-kubectl --context kind-mlrun -n mlrun rollout status deployment/mlrun-ui --timeout=600s
-kubectl --context kind-mlrun -n mlrun rollout status deployment/jupyter-notebook --timeout=600s
-kubectl --context kind-mlrun -n mlrun get pods,svc,pvc
+# 若 Helm 不在 PATH，指定其完整路径；代理参数可省略。
+# ./hack/local/kind/install-full.ps1 -HelmPath C:/tools/helm.exe -Proxy http://127.0.0.1:7897
+
+# 启动附加管理页面的本地转发。
+./hack/local/kind/start-access.ps1
 ```
 
-每条命令成功后再继续下一条；PowerShell 中可用 `$LASTEXITCODE` 检查上一条原生命令退出码，非 0 时先排错。首次导入 Jupyter 大镜像可能耗时较长，具体取决于磁盘和 Docker 资源，不保证固定完成时间。后续启动无需重新创建集群或下载镜像，运行 `kubectl apply` 即可。
+本机已下载的 Helm 位于 `playground/helm/windows-amd64/helm.exe`，该目录不进入 Git；其他机器需自行安装 Helm。
 
-## 已有集群更新镜像版本
+默认由 Kubernetes 直接下载镜像，不必先执行 `docker pull` 和 `kind load`。只有节点无法下载、宿主机可以下载时，才使用下方的镜像导入流程。
 
-先确认当前分支为 `development`，本地修改已提交或妥善保存。如果已经下载并导入 1.13.0-rc7 镜像，无需重新创建集群；否则先执行上面的镜像下载和导入命令。更新代码后重新应用清单，才会触发 Deployment 使用新镜像：
+脚本依次创建核心资源和随机凭据、安装 KFP/Argo 与 Operators、配置本地 HTTP 镜像仓库信任、安装 Kafka/TimescaleDB/监控、准备工作流 SDK 并等待所有 Deployment 就绪。`pipeline-sdk.yaml` 将编译器安装到共享 PVC 的 `.mlrun-kfp1`，通过 PYTHONPATH 加载，保留 MLRun 发布镜像内的核心 Python 依赖。
 
-```powershell
-git pull --ff-only origin development
-kubectl --context kind-mlrun apply -f hack/local/kind/mlrun.yaml
-kubectl --context kind-mlrun -n mlrun get deployments -o custom-columns=NAME:.metadata.name,IMAGE:.spec.template.spec.containers[0].image
-kubectl --context kind-mlrun -n mlrun rollout status deployment/mlrun-api --timeout=600s
-kubectl --context kind-mlrun -n mlrun rollout status deployment/mlrun-ui --timeout=600s
-kubectl --context kind-mlrun -n mlrun rollout status deployment/jupyter-notebook --timeout=600s
-```
+已有集群不要删除重建。`cluster.yaml` 只控制首次创建的 Docker 端口映射；修改它不会改变已有节点的主机端口。此前以 API 8080 创建的机器仍使用原端口，或额外运行 `kubectl --context kind-mlrun -n mlrun port-forward svc/mlrun-api 18080:8080`。
 
-已有业务数据时，在版本升级前备份持久卷；API 启动可能执行数据库迁移。若停在 `0 of 1 updated replicas are available`，请查看 Pod 状态和启动日志，而不是重复导入镜像：
+## 访问地址与端口规则
 
-```powershell
-kubectl --context kind-mlrun -n mlrun get pods
-kubectl --context kind-mlrun -n mlrun describe pods -l app=mlrun-api
-kubectl --context kind-mlrun -n mlrun logs deployment/mlrun-api --tail=100
-```
-
-## 访问与健康检查
-
-| 入口 | 本机地址 | 集群 Service / 目标端口 |
+| 页面 | 当前本机地址 | 集群内地址 |
 | --- | --- | --- |
-| MLRun UI | http://127.0.0.1:4000 | mlrun-ui:80 → 8090 |
-| MLRun API | http://127.0.0.1:8080 | mlrun-api:8080 → 8080 |
-| JupyterLab | http://127.0.0.1:8888/lab | jupyter-notebook:8888 → 8888 |
+| MLRun UI | http://127.0.0.1:4000 | mlrun-ui:80，容器监听 8090 |
+| MLRun API | http://127.0.0.1:18080 | mlrun-api:8080 |
+| JupyterLab | http://127.0.0.1:8888/lab | jupyter-notebook:8888 |
+| Grafana | http://127.0.0.1:3000/d/mlrun-local | monitoring-grafana:80 |
+| Nuclio | http://127.0.0.1:8070 | nuclio-dashboard:8070 |
+| KFP 管理页面 | http://127.0.0.1:8880 | ml-pipeline-ui:80 |
+| Prometheus | http://127.0.0.1:9090 | monitoring-prometheus:9090 |
 
-UI 经 Nginx 将 `/api` 转发给 `http://mlrun-api.mlrun.svc.cluster.local:8080`。此处使用完整服务域名，避免 Nginx 动态 DNS 解析短服务名失败。已检查 1.13.0-rc7 UI 镜像的 Nginx 配置，监听端口仍为 **8090**。
+前三个入口使用 kind 固定端口映射；后四个由 `start-access.ps1` 启动隐藏的 kubectl 进程。重启 Docker、关闭进程或转发目标 Pod 被替换后，重新运行该脚本。日志位于 `playground/access/`。脚本遇到其他程序占用端口会停止，不会静默改端口。
+
+**集群内部始终使用 Service 地址和原始容器端口。** 主机 API 改为 18080 后，Notebook 的 `MLRUN_DBPATH` 仍为 `http://mlrun-api:8080`，UI 的 API/Nuclio 代理仍为完整集群域名。不要把主机端口填入这些内部地址。MLRun 镜像中的“Resource monitoring”快捷按钮受 Iguazio 会话条件限制，本地无认证部署可直接使用上表 Grafana 入口。Grafana 对外链接在 `platform-env.yaml` 的 `MLRUN_GRAFANA_URL` 中配置。
+
+所有主机入口只绑定 `127.0.0.1`。API/Jupyter/Nuclio 是本地无认证模式，不应直接暴露公网。Grafana 用户名 `admin`，密码在 Kubernetes Secret 中，可在自己的终端读取：
 
 ```powershell
-curl.exe --fail http://127.0.0.1:8080/api/healthz
-curl.exe --fail http://127.0.0.1:8080/api/v1/projects
-curl.exe --fail http://127.0.0.1:4000/api/v1/projects
-curl.exe --fail -o NUL http://127.0.0.1:4000/
-curl.exe --fail -o NUL http://127.0.0.1:8888/lab
+$encoded = kubectl --context kind-mlrun -n mlrun get secret grafana-admin -o 'jsonpath={.data.admin-password}'
+[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($encoded))
 ```
 
-本地方案关闭 API 和 Jupyter 登录认证，端口仅绑定 `127.0.0.1`。不要直接改成公网绑定；远程访问需先配置认证、TLS 或受控隧道。
+安装脚本不会覆盖已有 Secret，也不会将随机密码写入 Git。本机首次安装时另存了 `playground/grafana-admin.txt`。
 
-Jupyter 中已配置 `MLRUN_DBPATH=http://mlrun-api:8080`。主机 Python SDK 应使用 `http://127.0.0.1:8080`，并与服务端 MLRun 版本保持一致。
+## 功能验收与日常检查
 
-## Kubernetes 作业验证
+```powershell
+kubectl --context kind-mlrun -n mlrun get deployments,pods,pvc
+kubectl --context kind-mlrun -n mlrun get kafka,nucliofunctions,workflows
+kubectl --context kind-mlrun top nodes
+curl.exe --fail http://127.0.0.1:18080/api/healthz
+curl.exe --fail http://127.0.0.1:4000/mlrun/api/v1/projects
+curl.exe --fail http://127.0.0.1:4000/mlrun/nuclio/api/functions
+```
 
-以下代码在 Jupyter Notebook 中执行，创建 `deployment-smoke` 项目并运行真实 Kubernetes Pod。复用已加载的 Jupyter 镜像，无需构建镜像或配置推送仓库。
+实际验收记录（2026-09-07～08）：
+
+- MLRun 核心服务和依赖 Deployment 就绪，API 返回 `1.13.0-rc7`。
+- 工作流 `mlrun-sdk-workflow-w47hf` 成功，MLRun 项目 `deployment-smoke`，运行 ID `8eff1fb7-08ec-4337-aaf8-b19262223717`；通过 MLRun SDK 提交并在 MLRun 工作流列表中显示 `Succeeded`。
+- 原生 KFP 2.17 工作流也完成，验证 Argo 执行、SeaweedFS S3 产物写入及元数据服务；临时 KFP 测试已归档并清理，保留 MLRun SDK 验收记录。
+- `serving-smoke` 完成 Kaniko 构建、仓库推送、节点拉取和 Nuclio 部署；输入 `[2,5,9]` 得到 `[4,10,18]`。
+- `deployment-smoke` 的 model-monitoring-controller、stream、writer 全部 Ready；30 次带监控推理后，TimescaleDB 的 predictions 表写入 30 条记录。
+- OpenTelemetry 指标已被 Prometheus 抓取；Grafana 配置了 MLRun 平台概览，包含项目、函数、模型端点、API 请求量和延迟。
+- 自动挂载 PVC 的 Kubernetes 作业读取到了 Notebook 生成的数据集。原来失败的 `trainer`/`auto-trainer` 记录予以保留，不代表新部署未就绪。
+- 浏览器验证通过项目概览、工作流列表/执行图/任务详情，以及模型端点列表/监控详情；Nuclio 概览正确显示 4 个 Running 函数。
+- Spark/MPI Operator 与 CRD 已安装；未对用户的实际 Spark/MPI 分布式训练进行验收。
+
+## Notebook 作业与模型监控
+
+Notebook 和作业会自动挂载 `mlrun-data` 到 `/home/jovyan/data`。Notebook、数据集、代码和需要持久化的模型应保存到该目录，其他目录在 Pod 重建后可能丢失。
 
 ```python
 import mlrun
-import mlrun.runtimes.mounts
 
 project = mlrun.get_or_create_project(
-    "deployment-smoke", context="/tmp/deployment-smoke", user_project=False
+    "my-project", context="/home/jovyan/data/my-project", user_project=False
 )
 function = mlrun.new_function(
-    name="k8s-smoke", project=project.name,
-    kind="job", image="mlrun/jupyter:1.13.0-rc7",
+    name="job-smoke", project=project.name, kind="job",
+    image="mlrun/mlrun:1.13.0-rc7",
 )
-function.apply(mlrun.runtimes.mounts.mount_pvc(
-    pvc_name="mlrun-data", volume_mount_path="/home/jovyan/data"
-))
 function.with_code(body='def handler(context):\n    context.log_result("answer", 42)\n')
 run = function.run(handler="handler", watch=True)
-assert run.status.state == "completed"
 assert run.status.results["answer"] == 42
 ```
 
-不要将 `mlrun/mlrun-api` 当作作业镜像：它默认启用 `MLRUN_IS_API_SERVER`，直接用于任务执行会导致 launcher 初始化异常。业务作业应使用 SDK/计算镜像。
+不要使用 `mlrun/mlrun-api` 作为计算镜像，它会按 API 服务角色初始化。新版手工挂载函数在 `mlrun.runtimes.mounts`，不是旧的 `mlrun.platforms.mount_pvc`。
 
-## 存储
+模型监控按项目启用。平台已安装 Kafka 和 TimescaleDB，新建项目后在 Notebook 中注册其数据存储配置：
 
-| PVC | 大小申请 | 挂载位置 | 用途 |
-| --- | --- | --- | --- |
-| mlrun-db | 10 GiB | API 的 /mlrun/db | SQLite 数据库、运行日志 |
-| mlrun-data | 10 GiB | API、Jupyter 的 /home/jovyan/data | 共享数据、实验产物、需要持久化的 Notebook |
+```python
+import os
+from mlrun.datastore.datastore_profile import (
+    DatastoreProfileKafkaStream, DatastoreProfilePostgreSQL,
+)
 
-使用 kind 默认 `standard` StorageClass 和 ReadWriteOnce PVC；两个应用在同一节点上共享数据卷。Notebook 请保存到 `/home/jovyan/data`，其他目录不会随 Pod 重建保留。
+project.register_datastore_profile(DatastoreProfilePostgreSQL(
+    name="local-timescaledb", host="mlrun-timescaledb.mlrun.svc.cluster.local",
+    port=5432, user="postgres", password=os.environ["POSTGRES_PASSWORD"],
+    database="mlrun",
+))
+project.register_datastore_profile(DatastoreProfileKafkaStream(
+    name="local-kafka",
+    brokers=["mlrun-kafka-kafka-bootstrap.mlrun.svc.cluster.local:9092"],
+    topics=[],
+))
+project.set_model_monitoring_credentials(
+    tsdb_profile_name="local-timescaledb", stream_profile_name="local-kafka",
+)
+project.enable_model_monitoring(
+    image="mlrun/mlrun:1.13.0-rc7",
+    deploy_histogram_data_drift_app=False,
+    wait_for_deployment=False,
+)
+# 在自己的 serving_fn 上启用监控后再部署：
+# serving_fn.set_tracking()
+# serving_fn.deploy()
+```
 
-Pod 重启或重新应用清单不会删除 PVC。**删除 kind 集群会丢失节点内的卷数据**；删除命名空间/PVC 也可能触发存储回收。删除前须导出备份。多节点部署应改用适合实际集群的共享存储，不能直接沿用此单节点配置。
+示例启用基础预测监控。需要直方图漂移分析时，将 `deploy_histogram_data_drift_app` 改为 `True` 并提供模型的参考统计数据；这会额外部署监控应用并占用资源。TimescaleDB 会根据 MLRun system_id 创建 `mlrun_mm_<system_id>` 数据库。平台不自动为所有已有项目创建监控服务。
 
-## 区分镜像导入与服务启动等待
-
-### kind 一直显示 loading
-
-`kind load docker-image` 将宿主机 Docker 镜像导入节点 containerd，并不启动应用。两处缓存独立，Docker 中看到镜像不代表节点已可使用；导入过程可能没有百分比输出。
-
-保留导入窗口，在另一个 PowerShell 窗口检查：
+## 重启、存储和备份
 
 ```powershell
-# 持续显示统计，观察 BLOCK I/O 是否随时间增长；Ctrl+C 仅退出统计
+# 重启核心服务，保留数据。
+kubectl --context kind-mlrun -n mlrun rollout restart deployment/mlrun-api deployment/mlrun-ui deployment/jupyter-notebook
+# 配置文件变化后重新应用全部部署。
+./hack/local/kind/install-full.ps1
+./hack/local/kind/start-access.ps1
+```
+
+持久卷包括 MLRun SQLite/数据、KFP MySQL/SeaweedFS、镜像仓库、Kafka、TimescaleDB、Prometheus 和 Grafana。kind 的本地存储声明容量不等同于磁盘配额，应同时监控 Docker 实际磁盘用量。
+
+**删除 kind 集群、命名空间或 PVC 可能永久删除数据。** 更换机器前应导出 MLRun 数据卷，并分别备份 MySQL、PostgreSQL、SeaweedFS 和镜像仓库；不能通过重新 `kind create cluster` 恢复旧项目。
+
+## loading / 启动等待排查
+
+`kind load docker-image` 是镜像导入，不是服务启动；大型镜像没有持续百分比输出。保留导入终端，在另一个终端检查：
+
+```powershell
 docker stats mlrun-control-plane
-
-# 查看已可见的镜像及版本
-docker exec mlrun-control-plane crictl images | Select-String "mlrun"
-
-# 检查节点文件系统空间
+docker exec mlrun-control-plane crictl images | Select-String mlrun
 docker exec mlrun-control-plane df -h /var/lib/containerd
 ```
 
-磁盘写入持续增加、CPU 活跃，说明节点仍有处理活动，但不能单独证明一定能导入成功。镜像列表暂时为空也不足以证明卡死。节点空间充足时，仍需检查 Windows 上 Docker 虚拟磁盘所在驱动器的剩余空间。
-
-不要并发重复运行导入，也不要为此删除集群。若持续十几分钟无读写变化，保留日志后中断原导入，再使用首次部署中的逐镜像 `-v 6` 命令定位。`--name` 必须是 `mlrun`，不要写成 `mlru`。
-
-### rollout 一直显示 0 of 1 updated replicas are available
-
-这表示 Deployment 的 Pod 尚未 Ready，已经进入应用部署阶段。`--timeout=600s` 只规定等待上限，延长时间不能解决错误。另开窗口执行：
+CPU 和 BLOCK I/O 持续变化通常说明正在传输或解包。磁盘充足并不代表导入已完成。需要离线导入时逐个执行，集群名必须为 `mlrun`：
 
 ```powershell
-kubectl --context kind-mlrun -n mlrun get pods -o wide
-kubectl --context kind-mlrun -n mlrun get deployments -o custom-columns=NAME:.metadata.name,IMAGE:.spec.template.spec.containers[0].image
-kubectl --context kind-mlrun -n mlrun describe pods -l app=mlrun-api
-kubectl --context kind-mlrun -n mlrun logs deployment/mlrun-api --tail=100
-# 仅在容器曾重启时查看上一次退出日志
-kubectl --context kind-mlrun -n mlrun logs deployment/mlrun-api --previous --tail=100
+docker pull mlrun/mlrun-api:1.13.0-rc7
+kind load docker-image mlrun/mlrun-api:1.13.0-rc7 --name mlrun -v 6
+docker pull mlrun/mlrun-ui:1.13.0-rc7
+kind load docker-image mlrun/mlrun-ui:1.13.0-rc7 --name mlrun -v 6
+docker pull mlrun/jupyter:1.13.0-rc7
+kind load docker-image mlrun/jupyter:1.13.0-rc7 --name mlrun -v 6
 ```
 
-| 状态或事件 | 排查方向 |
-| --- | --- |
-| Pending / FailedScheduling | 资源不足、PVC 未绑定；查看 describe 的 Events |
-| ErrImagePull / ImagePullBackOff | 镜像标签、网络与导入目标；确认清单也是 1.13.0-rc7 |
-| ContainerCreating | 查看是否仍在拉取镜像、挂载卷或创建容器 |
-| CrashLoopBackOff / Error | 查看当前及 previous 日志，定位进程退出原因 |
-| Running 但 0/1 Ready | 查看启动/就绪探针事件、监听端口及应用初始化日志 |
-
-只执行 `docker pull` 和 `kind load` 不会修改 Deployment；必须更新仓库并执行 `kubectl apply`。如果远端更新与本地编辑冲突，先处理 Git 冲突，不能跳过更新继续使用旧清单。
-
-## 日常操作与排错
+`rollout status` 长时间显示 `0 of 1 updated replicas are available` 时，应查看 Pod 事件和日志：
 
 ```powershell
-kubectl --context kind-mlrun -n mlrun get pods,pvc
+kubectl --context kind-mlrun -n mlrun get pods
 kubectl --context kind-mlrun -n mlrun get events --sort-by=.lastTimestamp
-kubectl --context kind-mlrun -n mlrun logs deployment/mlrun-api --tail=100
-kubectl --context kind-mlrun -n mlrun logs deployment/mlrun-ui --tail=100
-kubectl --context kind-mlrun -n mlrun logs deployment/jupyter-notebook --tail=100
-
-# 重启服务，保留持久卷
-kubectl --context kind-mlrun -n mlrun rollout restart deployment/mlrun-api deployment/mlrun-ui deployment/jupyter-notebook
-
-# 暂停应用，保留集群和数据
-kubectl --context kind-mlrun -n mlrun scale deployment/mlrun-api deployment/mlrun-ui deployment/jupyter-notebook --replicas=0
-
-# 恢复
-kubectl --context kind-mlrun apply -f hack/local/kind/mlrun.yaml
+kubectl --context kind-mlrun -n mlrun describe pod <pod-name>
+kubectl --context kind-mlrun -n mlrun logs <pod-name> --all-containers --tail=100
+kubectl --context kind-mlrun -n mlrun logs <pod-name> --previous --tail=100
 ```
 
-- `ImagePullBackOff`：确认镜像已下载并通过 `kind load docker-image` 导入；Docker 的镜像缓存与节点 containerd 独立。
-- PVC `Pending`：检查 `kubectl --context kind-mlrun get storageclass` 和 Pod 事件，默认存储采用延迟绑定，初次调度前短暂 Pending 正常。
-- UI 502：先检查 API Ready 状态与 UI 到 API 的集群内连接；Nginx 报 `could not be resolved` 时确认代理地址使用完整服务域名。
-- UI 探针连接拒绝：检查目标端口是否是 `8090`。
-- Spark/MPI 资源不存在的日志：本方案没有安装相应 CRD，不能据此判断普通 job 运行失败；需要这些运行时再安装相应 Operator。
-- 端口占用：首次创建集群前修改 `cluster.yaml` 中的 `hostPort`。已有集群修改文件不会自动更新 Docker 端口映射。
+- `ImagePullBackOff`：先区分网络超时、认证、镜像标签不存在；不要重复重建集群。
+- UI 显示 Nuclio is not deployed：在 UI Deployment 设置 `MLRUN_NUCLIO_MODE=enabled`，并将 `MLRUN_NUCLIO_UI_URL` 指向主机的 8070 入口。
+- UI 工作流 500 / Nuclio 502：确认 KFP/Nuclio Ready、完整 Service 域名及 `local-access.yaml`。KFP 网络策略曾阻断主机访问，需保留核心入口的允许规则。
+- 工作流详情报 forEach 异常：不要在 Argo `workflowDefaults.templateDefaults` 中对所有模板隐式注入 retryStrategy。MLRun UI 不支持根节点是 Retry 的执行图；清单已移除该全局默认，任务重试可在工作流中显式配置。已有这类执行图不会被重写。
+- KFP driver 参数不匹配：Driver、Launcher 和 API 均须固定 `2.17.2`，不要使用 `master`。
+- metadata-writer 反复重启：`POD_NAMESPACE` 必须来自 Pod 命名空间，否则会连接不存在的 `metadata-grpc-service.kubeflow`。
+- S3 写入错误：检查 `kfp-launcher` 的 endpoint、`region: us-east-1` 及凭据引用。
+- Nuclio 镜像推送成功但 Pod 拉取失败：重新运行 `configure-registry.ps1`；节点必须将本地仓库映射到 Service IP 并使用 HTTP。
+- 训练找不到 Notebook 生成的文件：确认文件位于 `/home/jovyan/data`，并保留 `MLRUN_STORAGE__AUTO_MOUNT_TYPE=pvc` 及对应挂载参数。
+- 内存不足或 OOMKilled：增加 Docker 资源或减少并行作业/监控项目数量；不要通过修改不相关服务端口解决。
 
-## 1.13.0-rc7 验收记录（2026-09-07）
+## 上游来源
 
-- API、UI、Jupyter 的 Deployment 均使用 1.13.0-rc7，均为 1/1 Ready。
-- API 健康检查、项目列表、UI 首页、UI API 代理与 JupyterLab 均返回 HTTP 200。
-- 新版 SDK 作业挂载使用 `mlrun.runtimes.mounts.mount_pvc`；旧的 `mlrun.platforms.mount_pvc` 已不可用。
-- Kubernetes 作业 `k8s-smoke-handler-hkmzc` 完成，结果 `answer=42`；项目 `deployment-smoke`，运行 UID `94e49a0dd6bf49419a1576068b1663cb`。
-- 本次为原 kind 容器不存在后的重新创建，未验证旧数据库跨版本迁移，也未恢复原集群数据。
-- 本机 8080 端口无法绑定，因此在不修改通用清单的前提下，使用下列本机集群配置将 API 主机端口改为 18080。当前访问入口为 UI `http://127.0.0.1:4000`、API `http://127.0.0.1:18080`、Jupyter `http://127.0.0.1:8888/lab`。
-
-仅在首次创建且 8080 不可用时，生成本机配置替代上文的 create 命令（已有集群不要重复创建）：
-
-```powershell
-New-Item -ItemType Directory -Force playground | Out-Null
-(Get-Content hack/local/kind/cluster.yaml -Raw).Replace('hostPort: 8080', 'hostPort: 18080') | Set-Content playground/cluster.local.yaml
-kind create cluster --name mlrun --config playground/cluster.local.yaml --wait 180s
-```
-
-使用此替代配置后，将主机访问和健康检查 URL 中的 8080 替换为 18080；集群内部服务端口继续使用 8080。
-
-本次节点可直接访问镜像仓库，因此通过 `kubectl apply` 触发节点下载，没有执行 `kind load`。若节点能访问仓库，可省略宿主机 `docker pull` 和 `kind load` 两组命令；若节点无法下载，则使用本文的预拉取和导入步骤。两种方式选择一种即可。
-
-## 历史验收记录（1.7.0，2026-09-07）
-
-以下记录仅对应旧版 1.7.0，不代表 1.13.0-rc7 已完成运行验证。新版清单的结构校验不能代替升级后的服务就绪检查和作业测试。
-
-- 三个 Deployment 均为 `1/1` Ready，两个 PVC 均为 Bound。
-- API 健康检查、项目列表、UI 首页、UI 代理项目列表、JupyterLab 均返回 HTTP 200。
-- Kubernetes 作业 `k8s-smoke-handler-bcgpt` 执行完成，结果 `answer=42`。
-- 成功运行 UID：`e34868847f7548ae930768e8aaef3003`，项目：`deployment-smoke`，可在 UI 中查看。
-- 重建 API Pod 后，项目与上述运行结果仍可读取，验证数据库卷持久化。
-- Kubernetes 服务端 dry-run 校验通过。
-- 首次使用 API 镜像执行的诊断任务曾失败，错误原因及正确作业镜像见上文；失败 Pod 已清理，项目中可能仍显示该诊断运行记录。
-
-## 参考资料
-
-- 仓库本地部署说明：[../README.md](../README.md)
-- kind 官方安装与集群说明：https://kind.sigs.k8s.io/docs/user/quick-start/
-- kind 端口映射说明：https://kind.sigs.k8s.io/docs/user/configuration/
+- [MLRun CE](https://github.com/mlrun/ce)
+- [KFP 2.17.2](https://github.com/kubeflow/pipelines/tree/2.17.2/manifests)
+- [Nuclio Helm](https://nuclio.github.io/nuclio/charts/)
+- [Metrics Server](https://github.com/kubernetes-sigs/metrics-server/releases)
+- [Prometheus Helm](https://github.com/prometheus-community/helm-charts)
+- [Strimzi](https://strimzi.io/)
+- [OpenTelemetry Helm](https://github.com/open-telemetry/opentelemetry-helm-charts)

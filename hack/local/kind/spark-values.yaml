@@ -1,0 +1,8 @@
+spark:
+  jobNamespaces: [mlrun]
+  serviceAccount:
+    name: sparkapp
+controller:
+  replicas: 1
+webhook:
+  replicas: 1
