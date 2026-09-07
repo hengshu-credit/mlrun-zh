@@ -1,0 +1,32 @@
+.mlrun-language-selector {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  color: #323338;
+  font-size: 13px;
+}
+
+.mlrun-language-selector select {
+  padding: 6px 8px;
+  border: 1px solid #b9bcc5;
+  border-radius: 4px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.mlrun-language-selector select:focus-visible {
+  outline: 2px solid #3d67ff;
+  outline-offset: 2px;
+}
+
+html[lang="zh-CN"] body {
+  font-family: "Open Sans", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+}
+
+@media (max-width: 1050px) {
+  .mlrun-language-selector > span { display: none; }
+  .header__actions { flex-wrap: wrap; }
+}
