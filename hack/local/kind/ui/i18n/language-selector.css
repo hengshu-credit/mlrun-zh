@@ -22,11 +22,15 @@
   outline-offset: 2px;
 }
 
-html[lang="zh-CN"] body {
-  font-family: "Open Sans", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+html[lang='zh-CN'] body {
+  font-family: var(--mlrun-ui-font, 'Open Sans'), 'Microsoft YaHei', 'PingFang SC', sans-serif;
 }
 
 @media (max-width: 1050px) {
-  .mlrun-language-selector > span { display: none; }
-  .header__actions { flex-wrap: wrap; }
+  .mlrun-language-selector > span {
+    display: none;
+  }
+  .header__actions {
+    flex-wrap: wrap;
+  }
 }

@@ -9,7 +9,10 @@ beforeEach(() => {
   setLocale('en')
   localStorage.clear()
 })
-afterEach(() => { cleanup(); vi.restoreAllMocks() })
+afterEach(() => {
+  cleanup()
+  vi.restoreAllMocks()
+})
 
 describe('locale preference', () => {
   it('uses the browser language and gives a saved choice priority', () => {
@@ -28,8 +31,12 @@ describe('locale preference', () => {
   })
 
   it('keeps working when browser storage is blocked', () => {
-    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked') })
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked') })
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('blocked')
+    })
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('blocked')
+    })
     initializeLocale(['zh-Hans'])
     expect(getLocale()).toBe('zh-CN')
     expect(() => setLocale('en')).not.toThrow()
@@ -60,9 +67,18 @@ describe('translation and interaction', () => {
     function Form() {
       useLocale()
       const [name, setName] = useState('Projects')
-      return <><LanguageSelector /><h1>{t('Projects')}</h1>
-        <input aria-label="Project name" value={name} onChange={event => setName(event.target.value)} />
-        <p>{name}</p></>
+      return (
+        <>
+          <LanguageSelector />
+          <h1>{t('Projects')}</h1>
+          <input
+            aria-label="Project name"
+            value={name}
+            onChange={event => setName(event.target.value)}
+          />
+          <p>{name}</p>
+        </>
+      )
     }
     render(<Form />)
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'My Projects' } })

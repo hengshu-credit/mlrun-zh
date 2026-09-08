@@ -9,11 +9,11 @@
 | 组件 | 安装版本 |
 | --- | --- |
 | MLRun API / Jupyter / 计算镜像 | 1.13.0-rc7 |
-| MLRun UI | 1.13.0-rc7-local.1（官方 rc7 源码 + 本地权限修复）|
+| MLRun UI | 1.13.0-rc7-local.10（官方 rc7 源码 + 双语与本地权限修复）|
 | kind / Kubernetes | 0.33.0 / 1.37.0 |
 | Kubeflow Pipelines 服务端 / Driver / Launcher | 2.17.2 |
 | Argo Workflows | 4.0.5 |
-| Nuclio / Helm Chart | 1.17.6 / 0.23.6 |
+| Nuclio / Helm Chart | 1.17.6（Dashboard 使用双语 local.1 镜像）/ 0.23.6 |
 | Distribution 镜像仓库 | 3.1.1 |
 | Strimzi / Kafka（KRaft） | 1.2.0 / 4.3.1 |
 | TimescaleDB / PostgreSQL | 2.29.2 / 17.11 |
@@ -40,7 +40,7 @@
 
 - Docker Desktop 已启动，使用 Linux containers。
 - 安装 `kubectl`、`kind`、Helm 3，确保命令在 PATH 中。此次实际使用 Helm 3.18.6。
-- 安装 Git、Node.js 22 或更新版本（含 npm）；用于构建 UI 修复镜像。本机使用 Node.js 26.4.0 验证。
+- 安装 Git、Node.js 22 或 24（含 npm）；用于构建 UI 镜像和运行回归测试。脚本支持通过 `-NodePath` 指定 Node.js。
 - 建议为 Docker 分配至少 16 GiB 内存；本机完整部署和模型监控运行时约占 12～13 GiB，训练或并行构建需要额外余量。
 - 镜像和构建缓存较大，建议预留至少 80 GB 实际磁盘空间。Jupyter 镜像的 Docker 磁盘占用约 17.3 GB，Docker 与节点 containerd 缓存独立。
 - 需要访问 Docker Hub、GHCR、Quay、registry.k8s.io、GCR、PyPI、GitHub codeload 和 npm registry。脚本的 `-Proxy` 用于下载 Helm 包、UI 源码和 npm 依赖；容器拉取镜像仍依赖 Docker/节点的网络配置。
@@ -73,13 +73,18 @@ kind create cluster --name mlrun --config hack/local/kind/cluster.yaml --wait 18
 
 本机已下载的 Helm 位于 `playground/helm/windows-amd64/helm.exe`，该目录不进入 Git；其他机器需自行安装 Helm。
 
-发布镜像默认由 Kubernetes 直接下载，不必先执行 `docker pull` 和 `kind load`。UI 修复镜像由脚本在宿主机自动构建并导入 kind，不依赖公共仓库提供 `local.1` 标签。只有节点无法下载、宿主机可以下载时，才使用下方的镜像导入流程。
+发布镜像默认由 Kubernetes 直接下载，不必先执行 `docker pull` 和 `kind load`。MLRun 与 Nuclio 的双语 UI 镜像由脚本在宿主机自动构建并导入 kind，不依赖公共仓库提供本地标签。只有节点无法下载、宿主机可以下载时，才使用下方的镜像导入流程。
 
 脚本首先调用 `build-ui.ps1` 下载固定 UI 源码、应用补丁、执行权限测试和前端构建，并将小型 UI 镜像导入 kind；之后创建核心资源和随机凭据、安装 KFP/Argo 与 Operators、配置本地 HTTP 镜像仓库信任、安装 Kafka/TimescaleDB/监控、准备工作流 SDK 并等待所有 Deployment 就绪。UI 源码和 npm 缓存位于忽略的 `playground/ui-release/`。`pipeline-sdk.yaml` 将编译器安装到共享 PVC 的 `.mlrun-kfp1`，通过 PYTHONPATH 加载，保留 MLRun 发布镜像内的核心 Python 依赖。
 
 已有集群不要删除重建。`cluster.yaml` 只控制首次创建的 Docker 端口映射；修改它不会改变已有节点的主机端口。此前以 API 8080 创建的机器仍使用原端口，或额外运行 `kubectl --context kind-mlrun -n mlrun port-forward svc/mlrun-api 18080:8080`。
 
 ## 访问地址与端口规则
+
+MLRun UI 支持简体中文与英文，可通过顶栏语言下拉框即时切换并保存偏好。
+本地构建保留工作流权限修复，使用 `1.13.0-rc7-local.10` UI 镜像。
+翻译目录、重建方法及覆盖范围见 [UI 双语说明](ui/README.zh-CN.md)。
+完整安装也会运行 `build-nuclio-ui.ps1` 构建 Nuclio 的中文实时函数与 API 网关界面；两个 Nuclio 页面直接内嵌在 MLRun 内容区，首次打开传递当前语言，见 [Nuclio 双语说明](nuclio-ui/README.zh-CN.md)。
 
 | 页面 | 当前本机地址 | 集群内地址 |
 | --- | --- | --- |

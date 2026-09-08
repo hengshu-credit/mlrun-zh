@@ -8,14 +8,25 @@ import { getTimeElapsedByDate, formatDatetime } from './datetime'
 import { getValidationRules } from './validation'
 import * as upstreamValidation from 'igz-controls/utils/validation.util'
 
-afterEach(() => { cleanup(); vi.useRealTimers(); setLocale('en') })
+afterEach(() => {
+  cleanup()
+  vi.useRealTimers()
+  setLocale('en')
+})
 
 it('localizes relative dates while retaining the timestamp and local timezone', () => {
   vi.useFakeTimers()
   vi.setSystemTime(new Date('2026-09-08T00:00:00Z'))
   setLocale('zh-CN')
-  expect(getTimeElapsedByDate('2026-09-07T22:00:00Z')).toContain('2 小时前')
-  expect(formatDatetime('2026-09-07T22:00:00Z', '-', { timeZone: 'UTC', year: 'numeric', month: 'long', day: 'numeric' })).toContain('2026年9月7日')
+  expect(getTimeElapsedByDate('2026-09-07T22:00:00Z')).toBe('2小时前')
+  expect(
+    formatDatetime('2026-09-07T22:00:00Z', '-', {
+      timeZone: 'UTC',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    })
+  ).toContain('2026年9月7日')
   setLocale('en')
   expect(getTimeElapsedByDate('2026-09-07T22:00:00Z')).toBe('2 hours ago')
 })
@@ -25,18 +36,28 @@ it('translates validation help without changing permitted project names', () => 
   const rules = getValidationRules('project.name')
   const original = upstreamValidation.getValidationRules('project.name')
   for (const value of ['my-project', '中文', 'a_b', 'name with spaces', '']) {
-    expect(rules.map(rule => rule.pattern.test(value))).toEqual(original.map(rule => rule.pattern.test(value)))
+    expect(rules.map(rule => rule.pattern.test(value))).toEqual(
+      original.map(rule => rule.pattern.test(value))
+    )
   }
   expect(rules.some(rule => /允许字符/.test(rule.label))).toBe(true)
+  expect(rules.every(rule => !/Length|Valid characters/.test(rule.label))).toBe(true)
+  expect(
+    getValidationRules('project.labels.key').every(
+      rule => !/\[Name\]|\[Prefix\]|Max length|Valid characters/.test(rule.label)
+    )
+  ).toBe(true)
   act(() => setLocale('en'))
   expect(rules.map(rule => rule.label)).toEqual(original.map(rule => rule.label))
 })
 
 it('switches shared control counters without clearing an edited form', () => {
   setLocale('en')
-  render(<Form onSubmit={() => {}} initialValues={{ description: '' }}>
-    {() => <FormTextarea name="description" label="Description" maxLength={10} />}
-  </Form>)
+  render(
+    <Form onSubmit={() => {}} initialValues={{ description: '' }}>
+      {() => <FormTextarea name="description" label="Description" maxLength={10} />}
+    </Form>
+  )
   fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Projects' } })
   expect(screen.getByRole('textbox')).toHaveValue('Projects')
   act(() => setLocale('zh-CN'))

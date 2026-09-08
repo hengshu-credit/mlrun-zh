@@ -25,9 +25,24 @@ export function initializeLocale(languages = navigator.languages) {
   } catch {
     // Browser privacy policies can disable storage; in-memory switching still works.
   }
-  const preferred = saved === 'en' || saved === 'zh-CN'
-    ? saved
-    : /^zh(?:-|$)/i.test(languages?.[0] || '') ? 'zh-CN' : 'en'
+  const url = new URL(window.location.href)
+  const requested = url.searchParams.get('lng')
+  if (requested === 'en' || requested === 'zh-CN') {
+    saved = requested
+    try {
+      localStorage.setItem(storageKey, requested)
+    } catch {
+      // Cross-application handoff also works when persistent storage is blocked.
+    }
+    url.searchParams.delete('lng')
+    window.history.replaceState(window.history.state, '', url)
+  }
+  const preferred =
+    saved === 'en' || saved === 'zh-CN'
+      ? saved
+      : /^zh(?:-|$)/i.test(languages?.[0] || '')
+        ? 'zh-CN'
+        : 'en'
   updateLocale(preferred)
 }
 

@@ -3,6 +3,10 @@ controller:
   enabled: true
 dashboard:
   enabled: true
+  image:
+    repository: mlrun/nuclio-dashboard
+    tag: 1.17.6-local.1
+    pullPolicy: IfNotPresent
   containerBuilderKind: kaniko
   ingress:
     enabled: false
