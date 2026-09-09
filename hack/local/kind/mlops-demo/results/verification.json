@@ -1,0 +1,56 @@
+{
+  "verified_at": "2026-09-08T05:02:03.170647+00:00",
+  "historical_features": {
+    "user_id": "user-039",
+    "order_id": "order-0239",
+    "as_of": "2026-09-06T03:33:18+00:00",
+    "visibility": "as_known",
+    "user_payment_count_1h": 1.0,
+    "user_payment_sum_24h": 263.0,
+    "user_payment_avg_7d": 132.88888888888889,
+    "user_failed_count_24h": 1.0,
+    "user_refund_sum_7d": 56.0,
+    "order_item_count_24h": 1.0,
+    "order_item_sum_24h": 83.0,
+    "order_failed_count_24h": 1.0
+  },
+  "prediction": {
+    "id": "ad2cf7dd-f085-4ec0-9d2e-e026ad21ed4e",
+    "model_name": "order-classifier",
+    "outputs": [
+      0
+    ],
+    "timestamp": "2026-09-08 05:02:03.111496+00:00",
+    "model_endpoint_uid": "c8b1f5f06eea4227a568f154319d9142"
+  },
+  "live_features": {
+    "user_id": "live-user",
+    "order_id": "live-order",
+    "as_of": "2026-09-08T05:02:03.126524+00:00",
+    "visibility": "as_known",
+    "user_payment_count_1h": 1.0,
+    "user_payment_sum_24h": 125.5,
+    "user_payment_avg_7d": 125.5,
+    "user_failed_count_24h": 0.0,
+    "user_refund_sum_7d": 0.0,
+    "order_item_count_24h": 0.0,
+    "order_item_sum_24h": 0.0,
+    "order_failed_count_24h": 0.0
+  },
+  "online_snapshot": {
+    "user_id": "live-user",
+    "order_id": "live-order",
+    "user_payment_count_1h": 1,
+    "user_payment_sum_24h": 125.5,
+    "user_payment_avg_7d": 125.5,
+    "user_failed_count_24h": 0,
+    "user_refund_sum_7d": 0,
+    "order_item_count_24h": 0,
+    "order_item_sum_24h": 0,
+    "order_failed_count_24h": 0
+  },
+  "historical_matches_training": true,
+  "backfill_matches_training": true,
+  "duplicate_is_idempotent": true,
+  "invalid_status": 400
+}

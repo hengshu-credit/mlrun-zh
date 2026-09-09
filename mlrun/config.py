@@ -204,6 +204,10 @@ default_config = {
     # FIXME: Adding these defaults here so we won't need to patch the "installing component" (provazio-controller) to
     #  configure this values on field systems, for newer system this will be configured correctly
     "v3io_api": "http://v3io-webapi:8081",
+    "sql_dataset": {
+        # A job image containing mlrun.datastore.sql_dataset and database drivers.
+        "job_image": "",
+    },
     "redis": {
         "url": "",
         "type": "standalone",  # deprecated.

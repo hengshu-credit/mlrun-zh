@@ -34,6 +34,7 @@ Get-Command kubectl, docker, $HelmPath -ErrorAction Stop | Out-Null
 Invoke-Checked kubectl @('--context',$Context,'get','nodes')
 # Build and import the bilingual UI with the CE workflow permission fix before changing workloads.
 if (-not $Context.StartsWith('kind-')) { throw 'This installer requires a kind context.' }
+& "$PSScriptRoot/build-sql-datasets.ps1" -ClusterName $Context.Substring(5)
 & "$PSScriptRoot/build-ui.ps1" -ClusterName $Context.Substring(5) -Proxy $Proxy
 & "$PSScriptRoot/build-nuclio-ui.ps1" -ClusterName $Context.Substring(5) -Proxy $Proxy
 Invoke-Checked kubectl @('--context',$Context,'apply','-f',"$PSScriptRoot/mlrun.yaml")

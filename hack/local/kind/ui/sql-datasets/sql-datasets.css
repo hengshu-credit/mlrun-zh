@@ -1,0 +1,165 @@
+.sql-datasets-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1500;
+  background: #12223566;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.sql-datasets-dialog {
+  background: #fff;
+  color: #243247;
+  width: min(1060px, 100%);
+  max-height: 92vh;
+  overflow-y: auto;
+  border-radius: 12px;
+  box-shadow: 0 20px 80px #12223555;
+  padding: 28px;
+}
+.sql-datasets-dialog header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+.sql-datasets-dialog h2 {
+  margin: 0 0 8px;
+  font-size: 24px;
+}
+.sql-datasets-dialog h3 {
+  margin: 0 0 12px;
+  font-size: 17px;
+}
+.sql-datasets-dialog p {
+  margin: 8px 0 14px;
+  line-height: 1.6;
+}
+.sql-datasets-dialog section {
+  padding: 22px 0;
+  border-top: 1px solid #e2e7ef;
+}
+.sql-datasets-dialog label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  font-weight: 500;
+}
+.sql-datasets-dialog input,
+.sql-datasets-dialog select,
+.sql-datasets-dialog textarea {
+  border: 1px solid #b8c2d2;
+  border-radius: 6px;
+  padding: 9px 12px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  min-width: 0;
+}
+.sql-datasets-dialog textarea,
+.sql-datasets-dialog pre,
+.sql-datasets-dialog code {
+  font-family: monospace;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.sql-datasets-dialog button {
+  border: 1px solid #b8c2d2;
+  padding: 8px 14px;
+  border-radius: 6px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.sql-datasets-dialog button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.sql-datasets-dialog .sql-datasets-primary {
+  background: #196a9c;
+  color: #fff;
+  border-color: #196a9c;
+}
+.sql-datasets-dialog :focus-visible {
+  outline: 2px solid #196a9c;
+  outline-offset: 3px;
+}
+.sql-datasets-dialog a {
+  color: #176494;
+  text-decoration: underline;
+}
+.sql-datasets-dialog fieldset {
+  border: 1px solid #e2e7ef;
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 8px;
+}
+.sql-datasets-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.sql-datasets-dialog .sql-datasets-definition {
+  display: grid;
+  gap: 16px;
+  padding: 0;
+  border: 0;
+}
+.sql-datasets-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-top: 12px;
+}
+.sql-datasets-table {
+  overflow: auto;
+}
+.sql-datasets-table table {
+  border-collapse: collapse;
+  width: 100%;
+  text-align: left;
+}
+.sql-datasets-table th,
+.sql-datasets-table td {
+  padding: 12px;
+  border-bottom: 1px solid #e2e7ef;
+  vertical-align: top;
+  max-width: 380px;
+  overflow-wrap: anywhere;
+}
+.sql-datasets-table th {
+  background: #f4f7fa;
+}
+.sql-datasets-run {
+  margin-top: 12px;
+}
+.sql-datasets-run code {
+  display: block;
+  padding: 8px;
+  background: #eff6f2;
+  margin-top: 8px;
+}
+.sql-datasets-error {
+  background: #fff0ef;
+  border: 1px solid #dfb2ad;
+  color: #8d2319;
+  padding: 12px;
+  border-radius: 6px;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 680px) {
+  .sql-datasets-backdrop {
+    padding: 8px;
+  }
+  .sql-datasets-dialog {
+    padding: 16px;
+    max-height: 96vh;
+  }
+  .sql-datasets-grid {
+    grid-template-columns: 1fr;
+  }
+}

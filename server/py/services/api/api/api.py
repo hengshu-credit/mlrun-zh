@@ -51,6 +51,7 @@ from services.api.api.endpoints import (
     runs,
     runtime_resources,
     schedules,
+    sql_datasets,
     submit,
     tags,
     user_secrets,
@@ -59,6 +60,7 @@ from services.api.api.endpoints import (
 
 # v1 router
 api_router = APIRouter(dependencies=[Depends(deps.verify_api_state)])
+api_router.include_router(sql_datasets.router, tags=["sql-datasets"])
 api_router.include_router(
     artifacts.router,
     tags=["artifacts"],

@@ -72,6 +72,13 @@ module.exports = (root) => {
   }
   update('src/App.jsx', '<Header navigate={router.navigate} router={router}',
     '<Header navigate={router.navigate} />', '<Header navigate={router.navigate} router={router} />')
+  // Later frame imports anchor to this stylesheet, including on a pristine checkout.
+  update(
+    'src/App.jsx',
+    "import './i18n/tianshu-shell.css'",
+    "import './scss/main.scss'",
+    "import './scss/main.scss'\nimport './i18n/tianshu-shell.css'",
+  )
   update('src/App.jsx', "import ResourceFrame from './i18n/ResourceFrame'",
     "import './i18n/tianshu-shell.css'", "import './i18n/tianshu-shell.css'\nimport ResourceFrame from './i18n/ResourceFrame'")
   update('src/App.jsx', 'path="documentation"',
@@ -86,12 +93,6 @@ module.exports = (root) => {
     "import Sidebar from '../../i18n/TianshuSidebar'",
     "import Sidebar from '../../nextGenComponents/shared/Sidebar'",
     "import Sidebar from '../../i18n/TianshuSidebar'",
-  )
-  update(
-    'src/App.jsx',
-    "import './i18n/tianshu-shell.css'",
-    "import './scss/main.scss'",
-    "import './scss/main.scss'\nimport './i18n/tianshu-shell.css'",
   )
   update(
     'src/App.jsx',

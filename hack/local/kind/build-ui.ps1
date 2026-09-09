@@ -9,7 +9,7 @@ $rootDirectory = (Resolve-Path (Join-Path $PSScriptRoot '../../..')).Path
 $cacheDirectory = Join-Path $rootDirectory 'playground/ui-release'
 $commit = 'c4235698cba093958c02281cd20dbe0ab380230e'
 $archiveHash = '98dd1234a72e4a170d5d1cb60849d34515c93afcb28c91718e76d7f9ba378934'
-$image = 'mlrun/mlrun-ui:1.13.0-rc7-local.10'
+$image = 'mlrun/mlrun-ui:1.13.0-rc7-local.11'
 $archive = Join-Path $cacheDirectory "$commit.zip"
 $sourceDirectory = Join-Path $cacheDirectory "ui-$commit"
 $imageDirectory = Join-Path $cacheDirectory 'image'
@@ -54,14 +54,15 @@ Invoke-Checked git @('-C',$sourceDirectory,'apply','--check',"$PSScriptRoot/ui/w
 Invoke-Checked git @('-C',$sourceDirectory,'apply',"$PSScriptRoot/ui/workflow-permissions.patch")
 Copy-Item -LiteralPath "$PSScriptRoot/ui/workflow-permissions.test.js" -Destination "$sourceDirectory/src/components/Workflow/workflow-permissions.test.js" -Force
 Invoke-Checked $NodePath @("$PSScriptRoot/ui/apply-bilingual.cjs", $sourceDirectory)
+Invoke-Checked $NodePath @("$PSScriptRoot/ui/apply-sql-datasets.cjs", $sourceDirectory)
 Push-Location $sourceDirectory
 try {
     # Use the upstream lock; skip browser-driver downloads and preinstall lock rewrites.
     $npmArgs = @('ci','--ignore-scripts','--no-audit','--no-fund')
     if ($Proxy) { $npmArgs += @('--https-proxy',$Proxy) }
     Invoke-Checked npm.cmd $npmArgs
-    Invoke-Checked $NodePath @('node_modules/vitest/vitest.mjs','run','src/i18n','src/components/Workflow/workflow-permissions.test.js','src/nextGenComponents/shared/Sidebar')
-    Invoke-Checked $NodePath @('node_modules/eslint/bin/eslint.js','src/i18n','src/layout/Header/Header.jsx','src/layout/Page/Page.jsx','src/nextGenComponents/shared/Sidebar/ProjectDropdown/ProjectDropdown.jsx','src/components/Workflow/workflow.util.js','src/components/Workflow/Workflow.jsx','src/elements/WorkflowsTable/WorkflowsTable.jsx')
+    Invoke-Checked $NodePath @('node_modules/vitest/vitest.mjs','run','src/i18n','src/sql-datasets','src/components/Workflow/workflow-permissions.test.js','src/nextGenComponents/shared/Sidebar')
+    Invoke-Checked $NodePath @('node_modules/eslint/bin/eslint.js','src/i18n','src/sql-datasets','src/layout/Header/Header.jsx','src/layout/Page/Page.jsx','src/nextGenComponents/shared/Sidebar/ProjectDropdown/ProjectDropdown.jsx','src/components/Workflow/workflow.util.js','src/components/Workflow/Workflow.jsx','src/elements/WorkflowsTable/WorkflowsTable.jsx')
     Invoke-Checked $NodePath @('node_modules/vite/bin/vite.js','build')
 } finally {
     Pop-Location

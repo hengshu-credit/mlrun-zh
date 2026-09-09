@@ -48,7 +48,7 @@ spec:
     spec:
       containers:
       - name: mlrun-api
-        image: mlrun/mlrun-api:1.13.0-rc7
+        image: mlrun/mlrun-api:1.13.0-rc7-sql.1
         env:
         - name: MLRUN_NAMESPACE
           valueFrom:
@@ -157,7 +157,7 @@ spec:
     spec:
       containers:
       - name: mlrun-ui
-        image: mlrun/mlrun-ui:1.13.0-rc7-local.10
+        image: mlrun/mlrun-ui:1.13.0-rc7-local.11
         env:
         - name: MLRUN_API_PROXY_URL
           value: http://mlrun-api.mlrun.svc.cluster.local:8080

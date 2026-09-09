@@ -9,4 +9,4 @@ USER 101
 
 COPY --chown=101:0 build/ /usr/share/nginx/html/
 LABEL org.opencontainers.image.revision="c4235698cba093958c02281cd20dbe0ab380230e" \
-      mlrun.local.ui.patch="workflow-permissions-1,bilingual-1,tianshu-shell-1,nuclio-embed-1,entry-cache-1"
+      mlrun.local.ui.patch="workflow-permissions-1,bilingual-1,tianshu-shell-1,nuclio-embed-1,entry-cache-1,sql-datasets-1"

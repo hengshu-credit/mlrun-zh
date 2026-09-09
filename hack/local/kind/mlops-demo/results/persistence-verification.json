@@ -1,0 +1,17 @@
+{
+  "redis_restart_preserved_snapshot": true,
+  "snapshot": [
+    {
+      "user_id": "live-user",
+      "order_id": "live-order",
+      "user_payment_count_1h": 1,
+      "user_payment_sum_24h": 125.5,
+      "user_payment_avg_7d": 125.5,
+      "user_failed_count_24h": 0,
+      "user_refund_sum_7d": 0,
+      "order_item_count_24h": 0,
+      "order_item_sum_24h": 0,
+      "order_failed_count_24h": 0
+    }
+  ]
+}
